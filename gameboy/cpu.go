@@ -22,18 +22,21 @@ type CPU struct {
 }
 
 func NewCPU(mapper *Mapper) *CPU {
+	// Initial state of the CPU for the classic GB
+	// It represents the state of the CPU after the BIOS has run, as we skip that
 	cpu := CPU{
-		AF:     0,
+		AF:     0x01b0,
 		BC:     0,
-		DE:     0,
-		HL:     0,
-		SP:     0,
+		DE:     0xff56,
+		HL:     0x000d,
+		SP:     0xfffe,
 		PC:     0x100,
 		mapper: mapper,
 
-		logging: true,
+		logging: false,
 	}
 
+	cpu.setFlagZ(true)
 	return &cpu
 }
 
@@ -150,21 +153,23 @@ func (cpu *CPU) getRegL() byte {
 	return getLowByte(cpu.HL)
 }
 
-func (cpu *CPU) Tick() {
+func (cpu *CPU) ExecuteNext() bool {
 	// Fetch the next instruction
 	opcode := cpu.fetchPC()
-	log.Printf("Opcode: 0x%02X\n", opcode)
+	cpu.logMessage("Opcode: 0x%02X", opcode)
 
 	if opcodes[opcode] == nil {
-		log.Printf("Unknown opcode: 0x%02X\n", opcode)
+		cpu.logMessage("Unknown opcode: 0x%02X\n", opcode)
 		cpu.PC--
-		return
+		return false
 	}
 
 	// Decode & execute the opcode
 	opcodes[opcode](cpu)
 
 	cpu.logMessage(cpu.opDebug)
+
+	return true
 }
 
 // =======================================

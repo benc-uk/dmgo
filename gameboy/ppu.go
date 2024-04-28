@@ -18,9 +18,11 @@ type PPU struct {
 	sprites [40]Sprite
 
 	// Scanline register
-	scanline byte
+	scanline   byte
+	dotCounter int
 }
 
+// Abstraction over the OAM data to represent a sprite
 type Sprite struct {
 	y        byte
 	x        byte
@@ -64,8 +66,15 @@ func NewPPU(mapper *Mapper) *PPU {
 }
 
 func (ppu *PPU) updateTileCache(addr uint16) {
-	tileNum := (addr - TILE_DATA_1) / 16
-	tileDataAddr := TILE_DATA_1 + tileNum*16
+	// Check the LCDC register in bit 4 to see which tile map to use
+	offset := uint16(TILE_DATA_3)
+	// When bit 4 is set, use the pair of tile data at 0x8000 + 0x8800
+	if ppu.GetLCDCBit(4) == 1 {
+		offset = uint16(TILE_DATA_1)
+	}
+
+	tileNum := (addr - offset) / 16
+	tileDataAddr := offset + tileNum*16
 	tileData := [16]byte{}
 	for i := uint16(0); i < 16; i++ {
 		tileData[i] = ppu.mapper.Read(tileDataAddr + i)
@@ -98,7 +107,7 @@ func (ppu *PPU) updateSpriteCache(addr uint16) {
 	ppu.sprites[i] = sprite
 }
 
-func (ppu *PPU) Render() {
+func (ppu *PPU) render() {
 	// TODO: REMOVE THIS?
 	ppu.screen.Fill(color.RGBA{191, 232, 183, 255})
 
@@ -109,7 +118,10 @@ func (ppu *PPU) Render() {
 	for i := uint16(0); i < 1024; i++ {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(float64((i%32)*8), float64((i/32)*8))
-		ppu.screen.DrawImage(ppu.tiles[ppu.mapper.Read(tileMap+i)], op)
+
+		tilenum := ppu.mapper.Read(tileMap + i)
+		// log.Printf("Tile %d at %d\n", tilenum, i)
+		ppu.screen.DrawImage(ppu.tiles[tilenum], op)
 	}
 
 	// Handle OAM and render sprites
@@ -124,13 +136,33 @@ func (ppu *PPU) Render() {
 		op.GeoM.Translate(float64(screenX), float64(screenY))
 		ppu.screen.DrawImage(ppu.tiles[sprite.tile], op)
 	}
+}
 
-	// HACK: This is a hack to update the scanline register
-	ppu.scanline++
-	if ppu.scanline > 153 {
-		ppu.scanline = 0
+func (ppu *PPU) cycle() {
+	ppu.dotCounter++
+
+	if ppu.dotCounter > 456 {
+		ppu.dotCounter = 0
+
+		ppu.scanline++
+		if ppu.scanline > 153 {
+			ppu.scanline = 0
+			ppu.render()
+		}
+
+		ppu.mapper.Write(0xFF44, ppu.scanline)
 	}
+}
 
-	// Write the scanline register to memory
-	ppu.mapper.Write(0xFF44, ppu.scanline)
+// LCD Control Register
+// Bit 7 - LCD Display Enable (0=Off, 1=On)
+// Bit 6 - Window Tile Map Display Select (0=9800-9BFF, 1=9C00-9FFF)
+// Bit 5 - Window Display Enable (0=Off, 1=On)
+// Bit 4 - Tile select for background (0=9000-97FF, 1=8000-8FFF)
+// Bit 3 - Tile Data Select (0=9800-9BFF, 1=9C00-9FFF)
+// Bit 2 - OBJ Size (0=8x8, 1=8x16)
+// Bit 1 - OBJ Display Enable (0=Off, 1=On)
+// Bit 0 - BG/Window Display/Priority (0=Off, 1=On)
+func (ppu *PPU) GetLCDCBit(bit byte) byte {
+	return ppu.mapper.Read(LCD_CONTROL) >> bit & 1
 }

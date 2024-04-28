@@ -7,7 +7,6 @@ import (
 	"yarg/gameboy"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
@@ -18,47 +17,47 @@ var (
 
 const scale = 4
 
-type Game struct {
-}
+type Game struct{}
 
+// Update the game state by one tick, happens at 2Mhz
 func (g *Game) Update() error {
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		gb.Tick()
-	}
+	// Run the system for one dot (like a tick)
+	gb.RunDot()
 
 	return nil
 }
 
 func init() {
-	f, err := os.Open("fonts/Crisp.ttf")
+	fontFile, err := os.Open("fonts/hermit.otf")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
+	defer fontFile.Close()
 
-	s, err := text.NewGoTextFaceSource(f)
+	faceSource, err = text.NewGoTextFaceSource(fontFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	faceSource = s
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	// Main emulator screen
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(scale, scale)
 	op.Filter = ebiten.FilterLinear
 
 	screen.DrawImage(gb.GetScreen(), op)
 
+	// Debug info
 	msg := gb.GetDebugInfo()
 	textOp := &text.DrawOptions{}
 	textOp.GeoM.Translate(650, 20)
-	textOp.LineSpacing = 28.0
+	textOp.LineSpacing = 22
 
 	textOp.ColorScale.ScaleWithColor(color.RGBA{0x00, 0xff, 0x11, 0xff})
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: faceSource,
-		Size:   26,
+		Size:   20,
 	}, textOp)
 }
 
@@ -68,18 +67,16 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 
 func main() {
 	gb = gameboy.NewGameboy()
-	//gb.LoadMemDump("roms/Tetris.dmp")
 	gb.Start()
 
+	//gb.LoadMemDump("roms/hello-world.dump")
 	//gb.LoadROM("roms/Tetris.gb")
 	gb.LoadROM("roms/hello-world.gb")
-	// for i := 0; i < 1000000; i++ {
-	// 	gb.Tick()
-	// }
 
 	game := &Game{}
+	ebiten.SetTPS(4194304 / 2) // 4.194304MHz but tick the dots at half this speed
 	ebiten.SetWindowSize(160*scale+500, 144*scale)
-	ebiten.SetWindowTitle("Gameboy Emulator (YARG)")
+	ebiten.SetWindowTitle("Goboy Emulator (DMGO)")
 
 	// Call ebiten.RunGame to start your game loop.
 	if err := ebiten.RunGame(game); err != nil {

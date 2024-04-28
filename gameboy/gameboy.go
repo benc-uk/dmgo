@@ -3,12 +3,11 @@ package gameboy
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
-
-// Gameboy emulator in Go
 
 type Gameboy struct {
 	mapper *Mapper
@@ -16,29 +15,21 @@ type Gameboy struct {
 	cpu    *CPU
 
 	running bool
+	dots    int64
 }
 
 func NewGameboy() *Gameboy {
 	mapper := NewMapper()
 
 	gb := Gameboy{
-		mapper: mapper,
-		ppu:    NewPPU(mapper),
-		cpu:    NewCPU(mapper),
+		mapper:  mapper,
+		ppu:     NewPPU(mapper),
+		cpu:     NewCPU(mapper),
+		running: false,
+		dots:    0,
 	}
 
 	return &gb
-}
-
-func (gb *Gameboy) Tick() error {
-	if !gb.running {
-		return nil
-	}
-
-	gb.cpu.Tick()
-	gb.ppu.Render()
-
-	return nil
 }
 
 func (gb *Gameboy) LoadMemDump(fileName string) {
@@ -81,7 +72,31 @@ func (gb *Gameboy) LoadROM(fileName string) {
 		}
 		log.Printf("Read %d bytes from %s into ROM1\n", byteCount, fileName)
 	}
+}
 
+func (gb *Gameboy) RunDot() {
+	if !gb.running {
+		return
+	}
+
+	gb.dots++
+
+	// Normally PPU runs every two dots, but we've already halved the speed
+	gb.ppu.cycle()
+
+	// Normally CPU runs every four dots, but we've already halved the speed
+	if gb.dots%2 == 0 {
+		ok := gb.cpu.ExecuteNext()
+		if !ok {
+			gb.ppu.render() // TODO: Remove this
+			gb.Stop()
+		}
+	}
+
+	// I have no idea if this is a real risk
+	if gb.dots > math.MaxInt64-1 {
+		gb.dots = 0
+	}
 }
 
 // Render and GetScreen are for the ebiten game loop
@@ -105,18 +120,23 @@ func (gb *Gameboy) GetDebugInfo() string {
 	cpu := gb.cpu
 
 	out := fmt.Sprintf("Prev: " + gb.cpu.opDebug)
-	out += fmt.Sprintf("\nPC: 0x%04x\n", gb.cpu.PC)
+	out += fmt.Sprintf("\nPC: 0x%04x\n\n", gb.cpu.PC)
 	out += fmt.Sprintf("A: 0x%02X B: 0x%02X C: 0x%02X D: 0x%02X\nE: 0x%02X H: 0x%02X L: 0x%02X SP: 0x%04X\n",
 		cpu.getRegA(), cpu.getRegB(), cpu.getRegC(), cpu.getRegD(), cpu.getRegE(), cpu.getRegH(), cpu.getRegL(), cpu.SP)
 
 	// Flags
-	out += fmt.Sprintf("Z: %d N: %d H: %d C: %d\n",
+	out += fmt.Sprintf("Z: %d N: %d H: %d C: %d\n\n",
 		BoolToInt(cpu.getFlagZ()), BoolToInt(cpu.getFlagN()), BoolToInt(cpu.getFlagH()), BoolToInt(cpu.getFlagC()))
 
 	// Show the next 10 bytes of memory
 	for i := cpu.PC; i < cpu.PC+10; i++ {
-		out += fmt.Sprintf("0x%04X: 0x%02X\n", i, gb.mapper.Read(i))
+		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.Read(i))
 	}
+
+	out += fmt.Sprintf("\n%04X: 0x%02b\n", 0xff40, gb.mapper.Read(0xff40))
+	out += fmt.Sprintf("%04X: 0x%02b\n", 0xff41, gb.mapper.Read(0xff41))
+	out += fmt.Sprintf("%04X: 0x%02X\n", 0xff44, gb.mapper.Read(0xff44))
+	out += fmt.Sprintf("%04X: 0x%02b\n", 0xff47, gb.mapper.Read(0xff47))
 
 	return out
 }
