@@ -17,8 +17,10 @@ type CPU struct {
 	// Memory
 	mapper *Mapper
 
-	logging bool
 	opDebug string
+
+	// Interrupts
+	IME bool
 }
 
 func NewCPU(mapper *Mapper) *CPU {
@@ -32,20 +34,28 @@ func NewCPU(mapper *Mapper) *CPU {
 		SP:     0xfffe,
 		PC:     0x100,
 		mapper: mapper,
-
-		logging: false,
 	}
 
 	cpu.setFlagZ(true)
 	return &cpu
 }
 
-func setHighByte(reg *uint16, value byte) {
-	*reg = uint16(value)<<8 | *reg&0xff
-}
+func (cpu *CPU) ExecuteNext() bool {
+	// Fetch the next instruction
+	opcode := cpu.fetchPC()
 
-func setLowByte(reg *uint16, value byte) {
-	*reg = uint16(value) | *reg&0xff00
+	if opcodes[opcode] == nil {
+		log.Printf("Unknown opcode: 0x%02X\n", opcode)
+		cpu.PC--
+		return false
+	}
+
+	// Decode & execute the opcode
+	opcodes[opcode](cpu)
+
+	cpu.logMessage(cpu.opDebug)
+
+	return true
 }
 
 func (cpu *CPU) setFlagZ(value bool) {
@@ -153,31 +163,20 @@ func (cpu *CPU) getRegL() byte {
 	return getLowByte(cpu.HL)
 }
 
-func (cpu *CPU) ExecuteNext() bool {
-	// Fetch the next instruction
-	opcode := cpu.fetchPC()
-	cpu.logMessage("Opcode: 0x%02X", opcode)
-
-	if opcodes[opcode] == nil {
-		cpu.logMessage("Unknown opcode: 0x%02X\n", opcode)
-		cpu.PC--
-		return false
-	}
-
-	// Decode & execute the opcode
-	opcodes[opcode](cpu)
-
-	cpu.logMessage(cpu.opDebug)
-
-	return true
-}
-
 // =======================================
 // Helpers
 // =======================================
 
+func setHighByte(reg *uint16, value byte) {
+	*reg = uint16(value)<<8 | *reg&0xff
+}
+
+func setLowByte(reg *uint16, value byte) {
+	*reg = uint16(value) | *reg&0xff00
+}
+
 func (cpu *CPU) logMessage(s string, a ...any) {
-	if cpu.logging {
+	if logging {
 		log.Printf(s, a...)
 	}
 }

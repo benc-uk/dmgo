@@ -1,12 +1,12 @@
 # DMGO - A Gameboy emulator written in Go
 
-A Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.org/) for rendering and display
+Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.org/) for rendering and display
 
 ![screen](./roms/hello.png)
 
 ## Status
 
-- Rendering of the VRAM via the PPU, with tilemaps and OAM sprites
+- Basic rendering of the VRAM contents via the PPU, with tilemaps and OAM sprites.
 - Primitive and very incorrect CPU and PPU timing clocks
 - A rubbish builtin debugger
 - About 13% of the opcodes

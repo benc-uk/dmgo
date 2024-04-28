@@ -7,6 +7,7 @@ import (
 	"yarg/gameboy"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
@@ -19,10 +20,18 @@ const scale = 4
 
 type Game struct{}
 
-// Update the game state by one tick, happens at 2Mhz
+// Update the game state by one tick, happens at 2Mhz or two dots
 func (g *Game) Update() error {
-	// Run the system for one dot (like a tick)
-	gb.RunDot()
+	if inpututil.IsKeyJustPressed(ebiten.KeyQ) {
+		log.Println("Quitting...")
+		os.Exit(0)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		gameboy.SetLogging(true)
+	}
+
+	// Run the system for two dots (like a tick)
+	gb.Cycle()
 
 	return nil
 }
@@ -45,7 +54,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(scale, scale)
 	op.Filter = ebiten.FilterLinear
-
 	screen.DrawImage(gb.GetScreen(), op)
 
 	// Debug info
@@ -54,7 +62,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	textOp.GeoM.Translate(650, 20)
 	textOp.LineSpacing = 22
 
-	textOp.ColorScale.ScaleWithColor(color.RGBA{0x00, 0xff, 0x11, 0xff})
+	textOp.ColorScale.ScaleWithColor(color.RGBA{0x00, 0xee, 0x11, 0xff})
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: faceSource,
 		Size:   20,
@@ -70,8 +78,8 @@ func main() {
 	gb.Start()
 
 	//gb.LoadMemDump("roms/hello-world.dump")
-	//gb.LoadROM("roms/Tetris.gb")
-	gb.LoadROM("roms/hello-world.gb")
+	gb.LoadROM("roms/Tetris.gb")
+	//gb.LoadROM("roms/hello-world.gb")
 
 	game := &Game{}
 	ebiten.SetTPS(4194304 / 2) // 4.194304MHz but tick the dots at half this speed

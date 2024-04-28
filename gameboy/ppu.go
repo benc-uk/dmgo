@@ -12,7 +12,7 @@ type PPU struct {
 	screen *ebiten.Image
 
 	// Cache of all the 8x8 tiles, updated when the VRAM is written to
-	tiles [256]*ebiten.Image
+	tiles [128 * 3]*ebiten.Image
 
 	// Cache of all the sprites, updated when the OAM is written to
 	sprites [40]Sprite
@@ -53,7 +53,7 @@ func NewPPU(mapper *Mapper) *PPU {
 	mapper.ppu = ppu
 
 	// Empty tile cache
-	for i := 0; i < 256; i++ {
+	for i := 0; i < 384; i++ {
 		ppu.tiles[i] = ebiten.NewImage(8, 8)
 	}
 
@@ -65,21 +65,17 @@ func NewPPU(mapper *Mapper) *PPU {
 	return ppu
 }
 
+// Tile cache maps the tile data 8000-97FF to a cache of 384 8x8 images
 func (ppu *PPU) updateTileCache(addr uint16) {
-	// Check the LCDC register in bit 4 to see which tile map to use
-	offset := uint16(TILE_DATA_3)
-	// When bit 4 is set, use the pair of tile data at 0x8000 + 0x8800
-	if ppu.GetLCDCBit(4) == 1 {
-		offset = uint16(TILE_DATA_1)
-	}
-
-	tileNum := (addr - offset) / 16
-	tileDataAddr := offset + tileNum*16
+	tileNum := (addr - TILE_DATA_0) / 16
+	tileDataAddr := TILE_DATA_0 + tileNum*16
 	tileData := [16]byte{}
 	for i := uint16(0); i < 16; i++ {
 		tileData[i] = ppu.mapper.Read(tileDataAddr + i)
 	}
 
+	// This converts the 16 bytes of tile data into an 8x8 image
+	// Using 2 bits per pixel to index the pallet
 	img := ebiten.NewImage(8, 8)
 	for tileByte := 0; tileByte < 16; tileByte += 2 {
 		for bit := 0; bit < 8; bit++ {
@@ -88,6 +84,8 @@ func (ppu *PPU) updateTileCache(addr uint16) {
 			img.Set(bit, tileByte/2, colour)
 		}
 	}
+
+	// log.Printf("Updating tile cache for tile %d %04X", tileNum, tileDataAddr)
 
 	ppu.tiles[tileNum] = img
 }
@@ -108,10 +106,22 @@ func (ppu *PPU) updateSpriteCache(addr uint16) {
 }
 
 func (ppu *PPU) render() {
-	// TODO: REMOVE THIS?
-	ppu.screen.Fill(color.RGBA{191, 232, 183, 255})
+	// TODO: Remove this later, it's helpful for debugging
+	ppu.screen.Fill(color.RGBA{0, 255, 255, 255})
 
-	tileMap := uint16(TILE_MAP_1)
+	// Tile map is 9800-9BFF when LCDC bit 6 is NOT set
+	tileMap := uint16(TILE_MAP_0)
+	if ppu.GetLCDCBit(3) == 1 {
+		// And 9C00-9FFF when it is set
+		tileMap = uint16(TILE_MAP_1)
+	}
+
+	// Tile offset is 0x8800 when LCDC bit 4 is NOT set
+	tileOffset := 256
+	if ppu.GetLCDCBit(4) == 1 {
+		// And 0x8000 when it is set
+		tileOffset = 0
+	}
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position
@@ -119,9 +129,13 @@ func (ppu *PPU) render() {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(float64((i%32)*8), float64((i/32)*8))
 
-		tilenum := ppu.mapper.Read(tileMap + i)
-		// log.Printf("Tile %d at %d\n", tilenum, i)
-		ppu.screen.DrawImage(ppu.tiles[tilenum], op)
+		tilenum := int(ppu.mapper.Read(tileMap + i))
+		if tileOffset > 0 {
+			// Tile number is signed 8bit when LCDC bit 4 is NOT set
+			tilenum = int(int8(tilenum))
+		}
+
+		ppu.screen.DrawImage(ppu.tiles[tileOffset+tilenum], op)
 	}
 
 	// Handle OAM and render sprites

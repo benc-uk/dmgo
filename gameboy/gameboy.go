@@ -9,6 +9,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+var (
+	logging = true
+)
+
 type Gameboy struct {
 	mapper *Mapper
 	ppu    *PPU
@@ -74,18 +78,20 @@ func (gb *Gameboy) LoadROM(fileName string) {
 	}
 }
 
-func (gb *Gameboy) RunDot() {
+// Cycle runs the system for two dot cycles (2 ticks of 4.19MHz)
+func (gb *Gameboy) Cycle() {
 	if !gb.running {
 		return
 	}
 
 	gb.dots++
 
-	// Normally PPU runs every two dots, but we've already halved the speed
+	// PPU runs every two dots
 	gb.ppu.cycle()
 
-	// Normally CPU runs every four dots, but we've already halved the speed
+	// CPU runs every four dots
 	if gb.dots%2 == 0 {
+		// Run the CPU fetch/exec cycle
 		ok := gb.cpu.ExecuteNext()
 		if !ok {
 			gb.ppu.render() // TODO: Remove this
@@ -93,13 +99,12 @@ func (gb *Gameboy) RunDot() {
 		}
 	}
 
-	// I have no idea if this is a real risk
+	// I have no idea if this is a real risk!
 	if gb.dots > math.MaxInt64-1 {
 		gb.dots = 0
 	}
 }
 
-// Render and GetScreen are for the ebiten game loop
 func (gb *Gameboy) GetScreen() *ebiten.Image {
 	return gb.ppu.screen
 }
@@ -110,10 +115,6 @@ func (gb *Gameboy) Start() {
 
 func (gb *Gameboy) Stop() {
 	gb.running = false
-}
-
-func (gb *Gameboy) IsRunning() bool {
-	return gb.running
 }
 
 func (gb *Gameboy) GetDebugInfo() string {
@@ -139,4 +140,8 @@ func (gb *Gameboy) GetDebugInfo() string {
 	out += fmt.Sprintf("%04X: 0x%02b\n", 0xff47, gb.mapper.Read(0xff47))
 
 	return out
+}
+
+func SetLogging(l bool) {
+	logging = l
 }

@@ -23,16 +23,47 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.BC++
 	},
 
+	// INC B
+	0x04: func(cpu *CPU) {
+		cpu.opDebug = "INC B"
+		cpu.setRegB(cpu.getRegB() + 1)
+	},
+
+	// DEC B
+	0x05: func(cpu *CPU) {
+		cpu.opDebug = "DEC B"
+		cpu.setRegB(cpu.getRegB() - 1)
+	},
+
+	// LD B, n
+	0x06: func(cpu *CPU) {
+		n := cpu.fetchPC()
+		cpu.opDebug = fmt.Sprintf("LD B,x%X", n)
+		cpu.setRegB(n)
+	},
+
 	// DEC BC
 	0x0B: func(cpu *CPU) {
 		cpu.opDebug = "DEC BC"
 		cpu.BC--
 	},
 
+	// INC C
+	0x0C: func(cpu *CPU) {
+		cpu.opDebug = "INC C"
+		cpu.setRegC(cpu.getRegC() + 1)
+	},
+
+	// DEC C
+	0x0D: func(cpu *CPU) {
+		cpu.opDebug = "DEC C"
+		cpu.setRegC(cpu.getRegC() - 1)
+	},
+
 	// LD C, n
 	0x0E: func(cpu *CPU) {
 		n := cpu.fetchPC()
-		cpu.opDebug = fmt.Sprintf("LD C,%X", n)
+		cpu.opDebug = fmt.Sprintf("LD C,x%X", n)
 		cpu.setRegC(n)
 	},
 
@@ -67,6 +98,15 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.setRegE(cpu.fetchPC())
 	},
 
+	// JR NZ,e
+	0x20: func(cpu *CPU) {
+		n := int8(cpu.fetchPC())
+		cpu.opDebug = fmt.Sprintf("JR NZ,x%X", n)
+		if !cpu.getFlagZ() {
+			cpu.PC += uint16(n)
+		}
+	},
+
 	// LD HL, nn
 	0x21: func(cpu *CPU) {
 		nn := cpu.fetchPC16()
@@ -99,10 +139,30 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.setRegL(cpu.fetchPC())
 	},
 
+	// LD SP, nn
+	0x31: func(cpu *CPU) {
+		cpu.SP = cpu.fetchPC16()
+		cpu.opDebug = fmt.Sprintf("LD SP,%04X", cpu.SP)
+	},
+
+	// LD [HL-], A
+	0x32: func(cpu *CPU) {
+		cpu.opDebug = "LD (HL-),A"
+		cpu.mapper.Write(cpu.HL, cpu.getRegA())
+		cpu.HL--
+	},
+
 	// INC SP
 	0x33: func(cpu *CPU) {
 		cpu.opDebug = "INC SP"
 		cpu.SP++
+	},
+
+	// LD (HL), n
+	0x36: func(cpu *CPU) {
+		n := cpu.fetchPC()
+		cpu.opDebug = fmt.Sprintf("LD (HL),x%X", n)
+		cpu.mapper.Write(cpu.HL, n)
 	},
 
 	// DEC SP
@@ -114,7 +174,7 @@ var opcodes = [0x100]func(cpu *CPU){
 	// LD A, n
 	0x3E: func(cpu *CPU) {
 		n := cpu.fetchPC()
-		cpu.opDebug = fmt.Sprintf("LD A,%X", n)
+		cpu.opDebug = fmt.Sprintf("LD A,x%X", n)
 		cpu.setRegA(n)
 	},
 
@@ -214,11 +274,31 @@ var opcodes = [0x100]func(cpu *CPU){
 		}
 	},
 
+	// LDH (n), A
+	0xE0: func(cpu *CPU) {
+		addr := 0xFF00 + uint16(cpu.fetchPC())
+		cpu.opDebug = fmt.Sprintf("LDH (%02X),A", addr)
+		cpu.mapper.Write(addr, cpu.getRegA())
+	},
+
 	// LD (nn), A
 	0xEA: func(cpu *CPU) {
 		addr := cpu.fetchPC16()
 		cpu.opDebug = fmt.Sprintf("LD (%04X),A", addr)
 		cpu.mapper.Write(addr, cpu.getRegA())
+	},
+
+	// LDH A, (n)
+	0xF0: func(cpu *CPU) {
+		addr := 0xFF00 + uint16(cpu.fetchPC())
+		cpu.opDebug = fmt.Sprintf("LDH A,(%02X)", addr)
+		cpu.setRegA(cpu.mapper.Read(addr))
+	},
+
+	// DI
+	0xF3: func(cpu *CPU) {
+		cpu.opDebug = "DI"
+		cpu.IME = false
 	},
 
 	// LD A, (nn)
@@ -231,9 +311,9 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// CP n
 	0xFE: func(cpu *CPU) {
-		v := cpu.fetchPC()
-		cpu.opDebug = fmt.Sprintf("CP A,%X", v)
-		cpu.cmp(cpu.getRegA(), v)
+		n := cpu.fetchPC()
+		cpu.opDebug = fmt.Sprintf("CP A,x%X", n)
+		cpu.cmp(cpu.getRegA(), n)
 	},
 }
 

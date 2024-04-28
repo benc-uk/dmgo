@@ -14,12 +14,12 @@ const LCD_CONTROL = 0xFF40
 const LCD_STAT = 0xFF41
 const LCD_Y = 0xFF44
 
-const TILE_DATA_1 = 0x8000
-const TILE_DATA_2 = 0x8800
-const TILE_DATA_3 = 0x9000
+const TILE_DATA_0 = 0x8000
+const TILE_DATA_1 = 0x8800
+const TILE_DATA_2 = 0x9000
 
-const TILE_MAP_1 = 0x9800
-const TILE_MAP_2 = 0x9C00
+const TILE_MAP_0 = 0x9800
+const TILE_MAP_1 = 0x9C00
 
 type Mapper struct {
 	rom0       []byte
@@ -66,7 +66,7 @@ func (m Mapper) Write(addr uint16, data byte) {
 			m.vram[addr-VRAM] = data
 
 			// Check for writes to the tile data
-			if addr >= TILE_DATA_1 && addr < TILE_MAP_1 && addr%16 == 15 {
+			if addr >= TILE_DATA_0 && addr < TILE_MAP_0 && addr%16 == 15 {
 				// Only update the tile if it's the 16th byte in the tile
 				// TODO: This is more efficient but could it cause issues?
 				m.ppu.updateTileCache(addr)
