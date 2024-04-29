@@ -2,7 +2,7 @@
 
 Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.org/) for rendering and display
 
-![screen](./roms/hello.png)
+![screen](./etc/screens/hello.png)
 
 ## Status
 
