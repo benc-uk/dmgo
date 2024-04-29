@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	logging = true
+	logging = false
 )
 
 type Gameboy struct {
@@ -120,8 +120,8 @@ func (gb *Gameboy) Stop() {
 func (gb *Gameboy) GetDebugInfo() string {
 	cpu := gb.cpu
 
-	out := fmt.Sprintf("Prev: " + gb.cpu.opDebug)
-	out += fmt.Sprintf("\nPC: 0x%04x\n\n", gb.cpu.PC)
+	out := fmt.Sprintf("Last instr: " + gb.cpu.opDebug)
+	out += fmt.Sprintf("\nPC: 0x%04X\n\n", gb.cpu.PC)
 	out += fmt.Sprintf("A: 0x%02X B: 0x%02X C: 0x%02X D: 0x%02X\nE: 0x%02X H: 0x%02X L: 0x%02X SP: 0x%04X\n",
 		cpu.getRegA(), cpu.getRegB(), cpu.getRegC(), cpu.getRegD(), cpu.getRegE(), cpu.getRegH(), cpu.getRegL(), cpu.SP)
 
@@ -129,15 +129,20 @@ func (gb *Gameboy) GetDebugInfo() string {
 	out += fmt.Sprintf("Z: %d N: %d H: %d C: %d\n\n",
 		BoolToInt(cpu.getFlagZ()), BoolToInt(cpu.getFlagN()), BoolToInt(cpu.getFlagH()), BoolToInt(cpu.getFlagC()))
 
-	// Show the next 10 bytes of memory
-	for i := cpu.PC; i < cpu.PC+10; i++ {
+	// Show the next 5 bytes of memory
+	for i := cpu.PC; i < cpu.PC+5; i++ {
 		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.Read(i))
 	}
 
 	out += fmt.Sprintf("\n%04X: 0x%02b\n", 0xff40, gb.mapper.Read(0xff40))
 	out += fmt.Sprintf("%04X: 0x%02b\n", 0xff41, gb.mapper.Read(0xff41))
 	out += fmt.Sprintf("%04X: 0x%02X\n", 0xff44, gb.mapper.Read(0xff44))
-	out += fmt.Sprintf("%04X: 0x%02b\n", 0xff47, gb.mapper.Read(0xff47))
+	out += fmt.Sprintf("%04X: 0x%02b\n\n", 0xff47, gb.mapper.Read(0xff47))
+
+	// Stack
+	for i := cpu.SP - 2; i < cpu.SP+5; i++ {
+		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.Read(i))
+	}
 
 	return out
 }

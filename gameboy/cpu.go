@@ -27,12 +27,12 @@ func NewCPU(mapper *Mapper) *CPU {
 	// Initial state of the CPU for the classic GB
 	// It represents the state of the CPU after the BIOS has run, as we skip that
 	cpu := CPU{
-		AF:     0x01b0,
-		BC:     0,
-		DE:     0xff56,
-		HL:     0x000d,
-		SP:     0xfffe,
-		PC:     0x100,
+		AF:     0x01B0,
+		BC:     0x0013,
+		DE:     0x00D8,
+		HL:     0x014D,
+		SP:     0xFFEE,
+		PC:     0x0100,
 		mapper: mapper,
 	}
 
@@ -45,7 +45,7 @@ func (cpu *CPU) ExecuteNext() bool {
 	opcode := cpu.fetchPC()
 
 	if opcodes[opcode] == nil {
-		log.Printf("Unknown opcode: 0x%02X\n", opcode)
+		log.Printf(" !!! Unknown opcode: 0x%02X\n", opcode)
 		cpu.PC--
 		return false
 	}
@@ -167,18 +167,83 @@ func (cpu *CPU) getRegL() byte {
 // Helpers
 // =======================================
 
+// Logs a message if logging is enabled
+func (cpu *CPU) logMessage(s string, a ...any) {
+	if logging {
+		log.Printf(s, a...)
+	}
+}
+
+// Fetches the next byte from memory and increments the program counter
+func (cpu *CPU) fetchPC() byte {
+	v := cpu.mapper.Read(cpu.PC)
+	cpu.PC += 1
+	return v
+}
+
+// Fetches the next 16-bit word from memory and increments the program counter
+func (cpu *CPU) fetchPC16() uint16 {
+	lo := cpu.mapper.Read(cpu.PC)
+	hi := cpu.mapper.Read(cpu.PC + 1)
+	cpu.PC += 2
+	return uint16(hi)<<8 | uint16(lo)
+}
+
+// Used to call a subroutine at the given address
+func (cpu *CPU) callSub(addr uint16) {
+	log.Printf(">>> Calling %04X from PC:%04X\n", addr, cpu.PC)
+	cpu.pushStack(cpu.PC)
+	cpu.PC = addr
+}
+
+// Pushes a 16-bit value onto the stack, often the PC but can be any value
+func (cpu *CPU) pushStack(addr uint16) {
+	log.Printf(">>>> Pushing %04X to stack at SP:%04X\n", addr, cpu.SP)
+
+	cpu.mapper.Write(cpu.SP-1, byte(addr>>8))
+	cpu.mapper.Write(cpu.SP-2, byte(addr&0xFF))
+	cpu.SP -= 2
+}
+
+// Returns from a subroutine by popping the address from the stack
+func (cpu *CPU) returnSub() {
+	pc := cpu.popStack()
+	log.Printf("Returning to %04X from SP:%04X\n", pc, cpu.SP)
+	cpu.PC = pc
+}
+
+// Pops a 16-bit value from the stack
+func (cpu *CPU) popStack() uint16 {
+	sp := cpu.SP
+	lo := cpu.mapper.Read(sp)
+	hi := cpu.mapper.Read(sp + 1)
+	cpu.SP += 2
+	return uint16(hi)<<8 | uint16(lo)
+}
+
+// Performs an OR operation on two bytes and sets the flags accordingly & returns the result
+func (cpu *CPU) byteOR(a, b byte) byte {
+	cpu.setFlagZ(a|b == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(false)
+	return a | b
+}
+
+// Performs comparison between two bytes sets the flags accordingly
+func (cpu *CPU) cmp(a, b byte) {
+	cpu.setFlagZ(a == b)
+	cpu.setFlagN(true)
+	cpu.setFlagH((a & 0xf) < (b & 0xf))
+	cpu.setFlagC(a < b)
+}
+
 func setHighByte(reg *uint16, value byte) {
 	*reg = uint16(value)<<8 | *reg&0xff
 }
 
 func setLowByte(reg *uint16, value byte) {
 	*reg = uint16(value) | *reg&0xff00
-}
-
-func (cpu *CPU) logMessage(s string, a ...any) {
-	if logging {
-		log.Printf(s, a...)
-	}
 }
 
 func getHighByte(reg uint16) byte {

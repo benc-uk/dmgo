@@ -1,3 +1,4 @@
 roms/Tetris.gb
 **/*.o
 tmp/
+*.exe

@@ -2,6 +2,7 @@ package gameboy
 
 import (
 	"fmt"
+	"log"
 )
 
 var opcodes = [0x100]func(cpu *CPU){
@@ -80,6 +81,13 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.DE++
 	},
 
+	// JR e
+	0x18: func(cpu *CPU) {
+		n := int8(cpu.fetchPC())
+		cpu.opDebug = fmt.Sprintf("JR x%X", n)
+		cpu.PC += uint16(n)
+	},
+
 	// LD A, (DE)
 	0x1A: func(cpu *CPU) {
 		cpu.opDebug = fmt.Sprintf("LD A,(DE:%04X)", cpu.DE)
@@ -124,6 +132,13 @@ var opcodes = [0x100]func(cpu *CPU){
 	// INC HL
 	0x23: func(cpu *CPU) {
 		cpu.opDebug = "INC HL"
+		cpu.HL++
+	},
+
+	// LD A, (HL+)
+	0x2A: func(cpu *CPU) {
+		cpu.opDebug = "LD A,(HL+)"
+		cpu.setRegA(cpu.mapper.Read(cpu.HL))
 		cpu.HL++
 	},
 
@@ -184,10 +199,34 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.setRegC(cpu.getRegB())
 	},
 
+	// LD C, H
+	0x4C: func(cpu *CPU) {
+		cpu.opDebug = "LD C,H"
+		cpu.setRegC(cpu.getRegH())
+	},
+
+	// LD C, L
+	0x4D: func(cpu *CPU) {
+		cpu.opDebug = "LD C,L"
+		cpu.setRegC(cpu.getRegL())
+	},
+
 	// LD E, B
 	0x58: func(cpu *CPU) {
 		cpu.opDebug = "LD E,B"
 		cpu.setRegE(cpu.getRegB())
+	},
+
+	// LD E, H
+	0x5C: func(cpu *CPU) {
+		cpu.opDebug = "LD E,H"
+		cpu.setRegE(cpu.getRegH())
+	},
+
+	// LD E, L
+	0x5D: func(cpu *CPU) {
+		cpu.opDebug = "LD E,L"
+		cpu.setRegE(cpu.getRegL())
 	},
 
 	// LD L, B
@@ -196,10 +235,33 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.setRegL(cpu.getRegB())
 	},
 
+	// LD L, H
+	0x6C: func(cpu *CPU) {
+		cpu.opDebug = "LD L,H"
+		cpu.setRegL(cpu.getRegH())
+	},
+
+	0x6D: func(cpu *CPU) {
+		cpu.opDebug = "LD L,L"
+		cpu.setRegL(cpu.getRegL())
+	},
+
 	// LD A, B
 	0x78: func(cpu *CPU) {
 		cpu.opDebug = "LD A,B"
 		cpu.setRegA(cpu.getRegB())
+	},
+
+	// LD A, H
+	0x7C: func(cpu *CPU) {
+		cpu.opDebug = "LD A,H"
+		cpu.setRegA(cpu.getRegH())
+	},
+
+	// LD A, L
+	0x7D: func(cpu *CPU) {
+		cpu.opDebug = "LD A,L"
+		cpu.setRegA(cpu.getRegL())
 	},
 
 	// XOR A, A
@@ -245,7 +307,6 @@ var opcodes = [0x100]func(cpu *CPU){
 	// OR A, L
 	0xB5: func(cpu *CPU) {
 		cpu.opDebug = "OR A,L"
-
 		cpu.setRegA(cpu.byteOR(cpu.getRegA(), cpu.getRegL()))
 	},
 
@@ -265,6 +326,20 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.PC = addr
 	},
 
+	// c9 is the opcode for RET
+	0xC9: func(cpu *CPU) {
+		cpu.opDebug = "RET"
+		cpu.returnSub()
+	},
+
+	// CALL nn
+	0xCD: func(cpu *CPU) {
+		addr := cpu.fetchPC16()
+		log.Printf(">> current PC is %04X", cpu.PC)
+		cpu.opDebug = fmt.Sprintf("CALL (%04X)", addr)
+		cpu.callSub(addr)
+	},
+
 	// JP C, nn
 	0xDA: func(cpu *CPU) {
 		addr := cpu.fetchPC16()
@@ -279,6 +354,12 @@ var opcodes = [0x100]func(cpu *CPU){
 		addr := 0xFF00 + uint16(cpu.fetchPC())
 		cpu.opDebug = fmt.Sprintf("LDH (%02X),A", addr)
 		cpu.mapper.Write(addr, cpu.getRegA())
+	},
+
+	// LD (C), A
+	0xE2: func(cpu *CPU) {
+		cpu.opDebug = "LD (C),A"
+		cpu.mapper.Write(0xFF00+uint16(cpu.getRegC()), cpu.getRegA())
 	},
 
 	// LD (nn), A
@@ -315,36 +396,4 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.opDebug = fmt.Sprintf("CP A,x%X", n)
 		cpu.cmp(cpu.getRegA(), n)
 	},
-}
-
-// =======================================
-// Helpers
-// =======================================
-
-func (cpu *CPU) fetchPC() byte {
-	v := cpu.mapper.Read(cpu.PC)
-	cpu.PC += 1
-	return v
-}
-
-func (cpu *CPU) byteOR(a, b byte) byte {
-	cpu.setFlagZ(a|b == 0)
-	cpu.setFlagN(false)
-	cpu.setFlagH(false)
-	cpu.setFlagC(false)
-	return a | b
-}
-
-func (cpu *CPU) fetchPC16() uint16 {
-	lo := cpu.mapper.Read(cpu.PC)
-	hi := cpu.mapper.Read(cpu.PC + 1)
-	cpu.PC += 2
-	return uint16(hi)<<8 | uint16(lo)
-}
-
-func (cpu *CPU) cmp(a, b byte) {
-	cpu.setFlagZ(a == b)
-	cpu.setFlagN(true)
-	cpu.setFlagH((a & 0xf) < (b & 0xf))
-	cpu.setFlagC(a < b)
 }

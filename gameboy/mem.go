@@ -4,6 +4,8 @@ const ROM_BANK = 0x4000
 const VRAM = 0x8000
 const VRAM_CONT = 0x9000
 const EXT_RAM = 0xA000
+const WRAM = 0xC000
+const ECHO_RAM = 0xE000
 const OAM = 0xFE00
 const OAM_END = 0xFE9F
 const IO = 0xFF00
@@ -21,6 +23,20 @@ const TILE_DATA_2 = 0x9000
 const TILE_MAP_0 = 0x9800
 const TILE_MAP_1 = 0x9C00
 
+// Gameboy Memory Map
+// 0x0000-0x3FFF: 16KB ROM Bank 00 (in cartridge, fixed at bank 00)
+// 0x4000-0x7FFF: 16KB ROM Bank 01..NN (in cartridge, switchable bank number)
+// 0x8000-0x9FFF: 8KB Video RAM (VRAM)
+// 0xA000-0xBFFF: 8KB External RAM (in cartridge, switchable bank, if any)
+// 0xC000-0xDFFF: 8KB Work RAM
+// 0xE000-0xFDFF: 7.5KB Echo RAM - Reserved, Do Not Use
+// 0xFE00-0xFE9F: 160B Sprite Attribute Table (OAM)
+// 0xFEA0-0xFEFF: Not Usable
+// 0xFF00-0xFF7F: 128B I/O Registers
+// 0xFF80-0xFFFE: 127B High RAM (HRAM)
+// 0xFFFF: 1B Interrupt Enable Register
+
+// Mapper is the memory map for the Gameboy
 type Mapper struct {
 	rom0       []byte
 	rom1       []byte
@@ -73,6 +89,17 @@ func (m Mapper) Write(addr uint16, data byte) {
 			}
 		}
 
+	case addr >= WRAM && addr < ECHO_RAM:
+		{
+			m.wram[addr-WRAM] = data
+		}
+
+	case addr >= ECHO_RAM && addr < OAM:
+		{
+			// Spooky data written to the echo RAM is also written to the WRAM
+			m.wram[addr-ECHO_RAM] = data
+		}
+
 	case addr >= OAM && addr <= OAM_END:
 		{
 			m.oam[addr-OAM] = data
@@ -94,6 +121,10 @@ func (m Mapper) Read(addr uint16) byte {
 		return m.rom1[addr-ROM_BANK]
 	case addr >= VRAM && addr < EXT_RAM:
 		return m.vram[addr-VRAM]
+	case addr >= WRAM && addr < ECHO_RAM:
+		return m.wram[addr-WRAM]
+	case addr >= ECHO_RAM && addr < OAM:
+		return m.wram[addr-ECHO_RAM]
 	case addr >= OAM && addr <= OAM_END:
 		return m.oam[addr-OAM]
 	case addr >= IO && addr < HRAM:

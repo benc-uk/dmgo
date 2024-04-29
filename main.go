@@ -1,7 +1,9 @@
 package main
 
 import (
+	"image"
 	"image/color"
+	"image/png"
 	"log"
 	"os"
 	"yarg/gameboy"
@@ -16,9 +18,40 @@ var (
 	faceSource *text.GoTextFaceSource
 )
 
-const scale = 4
+const (
+	scale      = 4
+	clockSpeed = 4194304
+)
 
 type Game struct{}
+
+func init() {
+	// Load font
+	fontFile, err := os.Open("res/hermit.otf")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fontFile.Close()
+
+	faceSource, err = text.NewGoTextFaceSource(fontFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Load icon
+	iconFile, err := os.Open("res/icon.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer iconFile.Close()
+
+	icon, err := png.Decode(iconFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ebiten.SetWindowIcon([]image.Image{icon})
+}
 
 // Update the game state by one tick, happens at 2Mhz or two dots
 func (g *Game) Update() error {
@@ -34,19 +67,6 @@ func (g *Game) Update() error {
 	gb.Cycle()
 
 	return nil
-}
-
-func init() {
-	fontFile, err := os.Open("fonts/hermit.otf")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer fontFile.Close()
-
-	faceSource, err = text.NewGoTextFaceSource(fontFile)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -73,20 +93,22 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 	return 160*4 + 500, 144 * 4
 }
 
+// Entry point is here
 func main() {
 	gb = gameboy.NewGameboy()
 	gb.Start()
 
 	//gb.LoadMemDump("roms/hello-world.dump")
-	gb.LoadROM("roms/Tetris.gb")
+	//gb.LoadROM("roms/cpu_instrs.gb")
 	//gb.LoadROM("roms/hello-world.gb")
+	gb.LoadROM("roms/Tetris.gb")
 
 	game := &Game{}
-	ebiten.SetTPS(4194304 / 2) // 4.194304MHz but tick the dots at half this speed
+	ebiten.SetTPS(clockSpeed / 2) // 4.19MHz but we run at half this for the PPU and CPU
 	ebiten.SetWindowSize(160*scale+500, 144*scale)
-	ebiten.SetWindowTitle("Goboy Emulator (DMGO)")
+	ebiten.SetWindowTitle("Gameboy Emulator (DMGO)")
 
-	// Call ebiten.RunGame to start your game loop.
+	// Call ebiten.RunGame to start
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
