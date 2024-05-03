@@ -1,5 +1,7 @@
 package gameboy
 
+import "log"
+
 const ROM_BANK = 0x4000
 const VRAM = 0x8000
 const VRAM_CONT = 0x9000
@@ -10,6 +12,7 @@ const OAM = 0xFE00
 const OAM_END = 0xFE9F
 const IO = 0xFF00
 const HRAM = 0xFF80
+const INT_ENABLE = 0xFFFF
 
 // HRAM register addresses
 const LCD_CONTROL = 0xFF40
@@ -34,19 +37,19 @@ const TILE_MAP_1 = 0x9C00
 // 0xFEA0-0xFEFF: Not Usable
 // 0xFF00-0xFF7F: 128B I/O Registers
 // 0xFF80-0xFFFE: 127B High RAM (HRAM)
-// 0xFFFF: 1B Interrupt Enable Register
+// 0xFFFF: Interrupt enable register
 
 // Mapper is the memory map for the Gameboy
 type Mapper struct {
-	rom0       []byte
-	rom1       []byte
-	vram       []byte
-	extRAM     []byte
-	wram       []byte
-	oam        []byte
-	io         []byte
-	hram       []byte
-	interrupts byte
+	rom0      []byte
+	rom1      []byte
+	vram      []byte
+	extRAM    []byte
+	wram      []byte
+	oam       []byte
+	io        []byte
+	hram      []byte
+	interrupt byte
 
 	ppu *PPU
 }
@@ -66,7 +69,7 @@ func NewMapper() *Mapper {
 	return m
 }
 
-func (m Mapper) Write(addr uint16, data byte) {
+func (m *Mapper) Write(addr uint16, data byte) {
 	switch {
 	case addr < ROM_BANK:
 		{
@@ -87,6 +90,11 @@ func (m Mapper) Write(addr uint16, data byte) {
 				// TODO: This is more efficient but could it cause issues?
 				m.ppu.updateTileCache(addr)
 			}
+		}
+
+	case addr >= EXT_RAM && addr < WRAM:
+		{
+			m.extRAM[addr-EXT_RAM] = data
 		}
 
 	case addr >= WRAM && addr < ECHO_RAM:
@@ -110,6 +118,26 @@ func (m Mapper) Write(addr uint16, data byte) {
 		{
 			m.io[addr-IO] = data
 		}
+
+	case addr >= HRAM && addr < INT_ENABLE:
+		{
+			m.hram[addr-HRAM] = data
+		}
+
+	case addr == INT_ENABLE:
+		{
+			m.interrupt = data
+		}
+
+	case addr >= 0xFEA0 && addr <= 0xFEFF:
+		{
+			log.Fatalf("Invalid write to 0xFEA0-0xFEFF")
+		}
+
+	default:
+		{
+			log.Fatalf("Invalid memory write at %04X", addr)
+		}
 	}
 }
 
@@ -121,6 +149,8 @@ func (m Mapper) Read(addr uint16) byte {
 		return m.rom1[addr-ROM_BANK]
 	case addr >= VRAM && addr < EXT_RAM:
 		return m.vram[addr-VRAM]
+	case addr >= EXT_RAM && addr < WRAM:
+		return m.extRAM[addr-EXT_RAM]
 	case addr >= WRAM && addr < ECHO_RAM:
 		return m.wram[addr-WRAM]
 	case addr >= ECHO_RAM && addr < OAM:
@@ -129,7 +159,12 @@ func (m Mapper) Read(addr uint16) byte {
 		return m.oam[addr-OAM]
 	case addr >= IO && addr < HRAM:
 		return m.io[addr-IO]
+	case addr >= HRAM && addr < INT_ENABLE:
+		return m.hram[addr-HRAM]
+	case addr == INT_ENABLE:
+		return m.interrupt
 	}
 
+	log.Fatalf("Invalid memory read at %04X", addr)
 	return 0
 }

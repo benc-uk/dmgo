@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	logging = false
+	logging = true
 )
 
 type Gameboy struct {
@@ -32,6 +32,14 @@ func NewGameboy() *Gameboy {
 		running: false,
 		dots:    0,
 	}
+
+	mapper.Write(0xff50, 0x01) // Disable the boot ROM
+	mapper.Write(0xff40, 0x91) // Set the LCDC register
+	mapper.Write(0xff41, 0x81) // Set the STAT register
+	mapper.Write(0xff44, 0x90) // Set the scanline to 144
+	mapper.Write(0xff47, 0xFC) // Set the background palette
+
+	// gb.cpu.breakpoint = 0x078C
 
 	return &gb
 }
@@ -79,7 +87,12 @@ func (gb *Gameboy) LoadROM(fileName string) {
 }
 
 // Cycle runs the system for two dot cycles (2 ticks of 4.19MHz)
-func (gb *Gameboy) Cycle() {
+func (gb *Gameboy) Cycle(force bool) {
+	if force {
+		gb.ppu.cycle()
+		_ = gb.cpu.ExecuteNext(true)
+	}
+
 	if !gb.running {
 		return
 	}
@@ -92,9 +105,10 @@ func (gb *Gameboy) Cycle() {
 	// CPU runs every four dots
 	if gb.dots%2 == 0 {
 		// Run the CPU fetch/exec cycle
-		ok := gb.cpu.ExecuteNext()
+		ok := gb.cpu.ExecuteNext(false)
 		if !ok {
 			gb.ppu.render() // TODO: Remove this
+			gb.DumpVRAM()
 			gb.Stop()
 		}
 	}
@@ -122,8 +136,9 @@ func (gb *Gameboy) GetDebugInfo() string {
 
 	out := fmt.Sprintf("Last instr: " + gb.cpu.opDebug)
 	out += fmt.Sprintf("\nPC: 0x%04X\n\n", gb.cpu.PC)
-	out += fmt.Sprintf("A: 0x%02X B: 0x%02X C: 0x%02X D: 0x%02X\nE: 0x%02X H: 0x%02X L: 0x%02X SP: 0x%04X\n",
-		cpu.getRegA(), cpu.getRegB(), cpu.getRegC(), cpu.getRegD(), cpu.getRegE(), cpu.getRegH(), cpu.getRegL(), cpu.SP)
+	out += fmt.Sprintf("A: %02X B: %02X C: %02X D: %02X\nE: %02X H: %02X L: %02X SP: %04X\n",
+		cpu.A(), cpu.B(), cpu.C(), cpu.D(), cpu.E(), cpu.H(), cpu.L(), cpu.SP)
+	out += fmt.Sprintf("AF: %04X BC: %04X DE: %04X HL: %04X\n\n", cpu.AF, cpu.BC, cpu.DE, cpu.HL)
 
 	// Flags
 	out += fmt.Sprintf("Z: %d N: %d H: %d C: %d\n\n",
@@ -149,4 +164,15 @@ func (gb *Gameboy) GetDebugInfo() string {
 
 func SetLogging(l bool) {
 	logging = l
+}
+
+func (gb *Gameboy) DumpVRAM() {
+	file, err := os.Create("vram.dump")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for i := uint16(0x8000); i < 0x9800; i++ {
+		file.Write([]byte{gb.mapper.Read(i)})
+	}
 }

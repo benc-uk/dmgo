@@ -59,12 +59,14 @@ func (g *Game) Update() error {
 		log.Println("Quitting...")
 		os.Exit(0)
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
-		gameboy.SetLogging(true)
+
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		gb.Cycle(true)
+		return nil
 	}
 
 	// Run the system for two dots (like a tick)
-	gb.Cycle()
+	gb.Cycle(false)
 
 	return nil
 }
@@ -95,13 +97,17 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 
 // Entry point is here
 func main() {
+	romName := "roms/cpu_instrs.gb"
+	// romName := "roms/Tetris.gb"
+	if len(os.Args) > 1 {
+		romName = os.Args[1]
+	}
+
 	gb = gameboy.NewGameboy()
 	gb.Start()
 
 	//gb.LoadMemDump("roms/hello-world.dump")
-	//gb.LoadROM("roms/cpu_instrs.gb")
-	//gb.LoadROM("roms/hello-world.gb")
-	gb.LoadROM("roms/Tetris.gb")
+	gb.LoadROM(romName)
 
 	game := &Game{}
 	ebiten.SetTPS(clockSpeed / 2) // 4.19MHz but we run at half this for the PPU and CPU

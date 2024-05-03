@@ -21,6 +21,8 @@ type CPU struct {
 
 	// Interrupts
 	IME bool
+
+	breakpoint uint16
 }
 
 func NewCPU(mapper *Mapper) *CPU {
@@ -37,13 +39,30 @@ func NewCPU(mapper *Mapper) *CPU {
 	}
 
 	cpu.setFlagZ(true)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(false)
+	cpu.IME = false
+
 	return &cpu
 }
 
-func (cpu *CPU) ExecuteNext() bool {
-	// Fetch the next instruction
+func (cpu *CPU) ExecuteNext(ignoreBreak bool) bool {
+	oldPC := cpu.PC
+
+	// Fetch the next instruction, this will also increment the PC
 	opcode := cpu.fetchPC()
 
+	cpu.logMessage("%04X:%02X %s", oldPC, opcode, opcodeNames[opcode])
+	cpu.opDebug = opcodeNames[opcode]
+
+	if oldPC == cpu.breakpoint && !ignoreBreak {
+		log.Printf(">>> Breakpoint hit at %04X\n", oldPC)
+		cpu.PC--
+		return false
+	}
+
+	// Check if the opcode is valid
 	if opcodes[opcode] == nil {
 		log.Printf(" !!! Unknown opcode: 0x%02X\n", opcode)
 		cpu.PC--
@@ -53,10 +72,12 @@ func (cpu *CPU) ExecuteNext() bool {
 	// Decode & execute the opcode
 	opcodes[opcode](cpu)
 
-	cpu.logMessage(cpu.opDebug)
-
 	return true
 }
+
+// =======================================
+// Flag getters and setters
+// =======================================
 
 func (cpu *CPU) setFlagZ(value bool) {
 	if value {
@@ -91,77 +112,47 @@ func (cpu *CPU) setFlagC(value bool) {
 	}
 }
 
-func (cpu *CPU) getFlagZ() bool {
-	return cpu.AF&0x80 != 0
-}
+func (cpu *CPU) getFlagZ() bool { return cpu.AF&0x80 != 0 }
 
-func (cpu *CPU) getFlagN() bool {
-	return cpu.AF&0x40 != 0
-}
+func (cpu *CPU) getFlagN() bool { return cpu.AF&0x40 != 0 }
 
-func (cpu *CPU) getFlagH() bool {
-	return cpu.AF&0x20 != 0
-}
+func (cpu *CPU) getFlagH() bool { return cpu.AF&0x20 != 0 }
 
-func (cpu *CPU) getFlagC() bool {
-	return cpu.AF&0x10 != 0
-}
+func (cpu *CPU) getFlagC() bool { return cpu.AF&0x10 != 0 }
 
-func (cpu *CPU) setRegA(value byte) {
-	setHighByte(&cpu.AF, value)
-}
+// =======================================
+// Register getters and setters
+// =======================================
 
-func (cpu *CPU) setRegB(value byte) {
-	setHighByte(&cpu.BC, value)
-}
+func (cpu *CPU) setA(value byte) { setHighByte(&cpu.AF, value) }
 
-func (cpu *CPU) setRegC(value byte) {
-	setLowByte(&cpu.BC, value)
-}
+func (cpu *CPU) setB(value byte) { setHighByte(&cpu.BC, value) }
 
-func (cpu *CPU) setRegD(value byte) {
-	setHighByte(&cpu.DE, value)
-}
+func (cpu *CPU) setC(value byte) { setLowByte(&cpu.BC, value) }
 
-func (cpu *CPU) setRegE(value byte) {
-	setLowByte(&cpu.DE, value)
-}
+func (cpu *CPU) setD(value byte) { setHighByte(&cpu.DE, value) }
 
-func (cpu *CPU) setRegH(value byte) {
-	setHighByte(&cpu.HL, value)
-}
+func (cpu *CPU) setE(value byte) { setLowByte(&cpu.DE, value) }
 
-func (cpu *CPU) setRegL(value byte) {
-	setLowByte(&cpu.HL, value)
-}
+func (cpu *CPU) setH(value byte) { setHighByte(&cpu.HL, value) }
 
-func (cpu *CPU) getRegA() byte {
-	return getHighByte(cpu.AF)
-}
+func (cpu *CPU) setL(value byte) { setLowByte(&cpu.HL, value) }
 
-func (cpu *CPU) getRegB() byte {
-	return getHighByte(cpu.BC)
-}
+func (cpu *CPU) A() byte { return getHighByte(cpu.AF) }
 
-func (cpu *CPU) getRegC() byte {
-	return getLowByte(cpu.BC)
-}
+// Note there is no getter for the F register as it is not used directly
 
-func (cpu *CPU) getRegD() byte {
-	return getHighByte(cpu.DE)
-}
+func (cpu *CPU) B() byte { return getHighByte(cpu.BC) }
 
-func (cpu *CPU) getRegE() byte {
-	return getLowByte(cpu.DE)
-}
+func (cpu *CPU) C() byte { return getLowByte(cpu.BC) }
 
-func (cpu *CPU) getRegH() byte {
-	return getHighByte(cpu.HL)
-}
+func (cpu *CPU) D() byte { return getHighByte(cpu.DE) }
 
-func (cpu *CPU) getRegL() byte {
-	return getLowByte(cpu.HL)
-}
+func (cpu *CPU) E() byte { return getLowByte(cpu.DE) }
+
+func (cpu *CPU) H() byte { return getHighByte(cpu.HL) }
+
+func (cpu *CPU) L() byte { return getLowByte(cpu.HL) }
 
 // =======================================
 // Helpers
@@ -223,33 +214,65 @@ func (cpu *CPU) popStack() uint16 {
 
 // Performs an OR operation on two bytes and sets the flags accordingly & returns the result
 func (cpu *CPU) byteOR(a, b byte) byte {
-	cpu.setFlagZ(a|b == 0)
+	cpu.logMessage("--- OR: a:%02X, b:%02X", a, b)
+	result := a | b
+	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(false)
 	cpu.setFlagH(false)
 	cpu.setFlagC(false)
 	return a | b
 }
 
+// Performs an AND operation on two bytes and sets the flags accordingly & returns the result
+func (cpu *CPU) byteAND(a, b byte) byte {
+	cpu.logMessage("--- AND: a:%02X, b:%02X", a, b)
+	result := a & b
+	cpu.setFlagZ(result == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(true)
+	cpu.setFlagC(false)
+	return result
+}
+
+// Performs an XOR operation on two bytes and sets the flags accordingly & returns the result
+func (cpu *CPU) byteXOR(a, b byte) byte {
+	cpu.logMessage("--- XOR: a:%02X, b:%02X", a, b)
+	result := a ^ b
+	cpu.setFlagZ(result == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(false)
+	return result
+}
+
+// Performs addition between two bytes and sets the flags accordingly
+func (cpu *CPU) byteAdd(a, b byte) byte {
+	cpu.logMessage("--- ADD: a:%02X, b:%02X", a, b)
+	result := a + b
+	cpu.setFlagZ(result == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(halfCarryAdd(a, b))
+	// Note that the carry flag is left unchanged
+	return result
+}
+
+// Performs subtraction between two bytes and sets the flags accordingly
+func (cpu *CPU) byteSub(a, b byte) byte {
+	cpu.logMessage("--- SUB: a:%02X, b:%02X", a, b)
+	result := a - b
+	cpu.setFlagZ(result == 0)
+	cpu.setFlagN(true)
+	cpu.setFlagH(halfCarrySub(a, b))
+	// Note that the carry flag is left unchanged
+	return result
+}
+
 // Performs comparison between two bytes sets the flags accordingly
 func (cpu *CPU) cmp(a, b byte) {
-	cpu.setFlagZ(a == b)
+	cpu.logMessage("--- CMP: a:%02X, b:%02X", a, b)
+	result := a - b
+	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(true)
-	cpu.setFlagH((a & 0xf) < (b & 0xf))
+	cpu.setFlagH((a & 0xF) < (b & 0xF))
 	cpu.setFlagC(a < b)
-}
-
-func setHighByte(reg *uint16, value byte) {
-	*reg = uint16(value)<<8 | *reg&0xff
-}
-
-func setLowByte(reg *uint16, value byte) {
-	*reg = uint16(value) | *reg&0xff00
-}
-
-func getHighByte(reg uint16) byte {
-	return byte(reg >> 8)
-}
-
-func getLowByte(reg uint16) byte {
-	return byte(reg & 0xff)
 }
