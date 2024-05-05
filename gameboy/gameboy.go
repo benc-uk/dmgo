@@ -40,8 +40,8 @@ func NewGameboy() *Gameboy {
 	}
 
 	// Set up the initial state of the Gameboy
-	mapper.Write(0xff00, 0xff) // Set the joypad register
-	mapper.Write(0xff50, 0x01) // Disable the boot ROM
+	mapper.Write(0xff00, 0x30) // Set the joypad register
+	mapper.Write(0xff50, 0x00) // ENABLE the boot ROM
 	mapper.Write(0xff40, 0x91) // Set the LCDC register
 	mapper.Write(0xff41, 0x81) // Set the STAT register
 	mapper.Write(0xff44, 0x90) // Set the scanline to 144
@@ -50,10 +50,6 @@ func NewGameboy() *Gameboy {
 	// gb.cpu.breakpoint = 0x028f
 	gb.cpu.breakpoint = 0x0000
 	gb.mapper.watches = []uint16{0xff02, 0xff80, 0xffa6}
-	if !mapper.bootROMLoaded {
-		log.Println("Boot ROM not present, skipping to load cartridge ROM")
-		cpu.PC = 0x100
-	}
 
 	// Load the boot ROM from res/dmg_boot.bin
 	// If it fails, the boot ROM will be skipped and not used
@@ -68,7 +64,59 @@ func NewGameboy() *Gameboy {
 		}
 	}
 
+	if !mapper.bootROMLoaded {
+		log.Println("Boot ROM not present, skipping to load cartridge ROM")
+		mapper.Write(0xff50, 0x01) // DISABLE the boot ROM
+		cpu.PC = 0x100
+	}
+
 	return &gb
+}
+
+// Update runs the system
+func (gb *Gameboy) Update(cyclesPerFrame int) {
+	if !gb.running {
+		return
+	}
+
+	cycles := 0
+	for cycles <= cyclesPerFrame {
+		// Run the CPU fetch/exec cycle
+		cpuCycles := gb.cpu.ExecuteNext()
+		if cpuCycles <= 0 {
+			log.Println("CPU halted")
+			gb.DumpVRAM()
+			gb.ppu.render()
+			gb.Stop()
+			break
+		}
+
+		cycles += cpuCycles
+
+		// Handle interrupts
+		if gb.cpu.IME {
+			interrupt := gb.mapper.Read(INT_FLAG)
+			enabled := gb.mapper.Read(INT_ENABLE)
+
+			if interrupt&enabled > 0 {
+				gb.cpu.handleInterrupt(interrupt & enabled)
+			}
+		}
+
+		// PPU update
+		gb.ppu.cycle(cpuCycles)
+	}
+
+	gb.ppu.render()
+
+	// Read serial input
+	hasData := gb.mapper.Read(0xff02)
+	if hasData == 0x81 {
+		// Read the data from the serial port
+		data := gb.mapper.Read(0xff01)
+		log.Printf("Serial data read: %c\n", data)
+		gb.mapper.Write(0xff02, 0x00)
+	}
 }
 
 func (gb *Gameboy) LoadROM(fileName string) {
@@ -92,49 +140,6 @@ func (gb *Gameboy) LoadROM(fileName string) {
 			log.Fatal(err)
 		}
 		log.Printf("Read %d bytes from %s into ROM1\n", byteCount, fileName)
-	}
-}
-
-// Update runs the system
-func (gb *Gameboy) Update(cyclesPerFrame int) {
-	if !gb.running {
-		return
-	}
-
-	cycles := 0
-	for cycles <= cyclesPerFrame {
-		// Run the CPU fetch/exec cycle
-		ok, cpuCycles := gb.cpu.ExecuteNext()
-		cycles += cpuCycles
-		if !ok {
-			gb.ppu.render() // TODO: Remove this
-			gb.DumpVRAM()   // TODO: Remove this
-			gb.Stop()
-			break
-		}
-
-		// Handle interrupts
-		if gb.cpu.IME {
-			interrupt := gb.mapper.Read(INT_FLAG)
-			enabled := gb.mapper.Read(INT_ENABLE)
-
-			if interrupt&enabled > 0 {
-				gb.cpu.handleInterrupt(interrupt & enabled)
-			}
-		}
-
-		// PPU update
-		gb.ppu.cycle(cpuCycles)
-
-	}
-
-	// Read serial input
-	hasData := gb.mapper.Read(0xff02)
-	if hasData == 0x81 {
-		// Read the data from the serial port
-		data := gb.mapper.Read(0xff01)
-		log.Printf("Serial data read: %c\n", data)
-		gb.mapper.Write(0xff02, 0x00)
 	}
 }
 
@@ -190,7 +195,7 @@ func (gb *Gameboy) DumpVRAM() {
 		log.Fatal(err)
 	}
 
-	for i := uint16(0x8000); i < 0x9800; i++ {
+	for i := uint16(0x8000); i < 0x9FFF; i++ {
 		file.Write([]byte{gb.mapper.Read(i)})
 	}
 }

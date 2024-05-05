@@ -47,7 +47,7 @@ func NewCPU(mapper *Mapper) *CPU {
 	return &cpu
 }
 
-func (cpu *CPU) ExecuteNext() (bool, int) {
+func (cpu *CPU) ExecuteNext() int {
 	oldPC := cpu.PC
 
 	// Fetch the next instruction, this will also increment the PC
@@ -58,20 +58,21 @@ func (cpu *CPU) ExecuteNext() (bool, int) {
 	if oldPC == cpu.breakpoint && oldPC != 0 {
 		log.Printf(">>> Breakpoint hit at %04X\n", oldPC)
 		cpu.PC--
-		return false, 0
+		return -1
 	}
 
 	// Check if the opcode is valid
 	if opcodes[opcode] == nil {
 		log.Printf(" !!! Unknown opcode: 0x%02X\n", opcode)
 		cpu.PC--
-		return false, 0
+		return -1
 	}
 
 	// Decode & execute the opcode
 	opcodes[opcode](cpu)
 
-	return true, 8
+	cycles := opcodeLengths[opcode]
+	return cycles
 }
 
 func (cpu *CPU) handleInterrupt(interrupt byte) {

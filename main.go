@@ -53,10 +53,14 @@ func init() {
 	ebiten.SetWindowIcon([]image.Image{icon})
 }
 
-// Update the game state by one tick, happens at 2Mhz or two dots
+// Update the game state by the given delta time
 func (g *Game) Update() error {
+	tps := int(ebiten.ActualTPS())
+	if tps <= 0 {
+		return nil
+	}
 
-	gb.Update(clockSpeed / FPS)
+	gb.Update(clockSpeed / tps)
 
 	return nil
 }
@@ -89,8 +93,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 func main() {
 	//romName := "roms/cpu_instrs.gb"
 	//romName := "roms/Tetris.gb"
-	//romName := "roms/DrMario.gb"
-	romName := "roms/PipeDream.gb"
+	romName := "roms/DrMario.gb"
+	//romName := "roms/PipeDream.gb"
 
 	// if len(os.Args) > 1 {
 	// 	romName = os.Args[1]

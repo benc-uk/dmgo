@@ -26,6 +26,7 @@ Inspiration projects
 
 - https://github.com/jacoblister/emuboy
 - https://github.com/Humpheh/goboy
+- https://github.com/ArcticXWolf/AXWGameboy
 
 Cool videos
 

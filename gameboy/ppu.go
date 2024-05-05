@@ -74,18 +74,28 @@ func (ppu *PPU) updateTileCache(addr uint16) {
 		tileData[i] = ppu.mapper.Read(tileDataAddr + i)
 	}
 
+	// Read the pallet lookup from memory
+	palLookupByte := ppu.mapper.Read(0xFF47)
+
 	// This converts the 16 bytes of tile data into an 8x8 image
 	// Using 2 bits per pixel to index the pallet
 	img := ebiten.NewImage(8, 8)
 	for tileByte := 0; tileByte < 16; tileByte += 2 {
 		for bit := 0; bit < 8; bit++ {
 			pIndex := ((tileData[tileByte] >> (7 - bit) & 1) << 1) | (tileData[tileByte+1] >> (7 - bit) & 1)
+			if pIndex == 0 {
+				pIndex = palLookupByte & 0x3
+			} else if pIndex == 1 {
+				pIndex = (palLookupByte >> 2) & 0x3
+			} else if pIndex == 2 {
+				pIndex = (palLookupByte >> 4) & 0x3
+			} else {
+				pIndex = (palLookupByte >> 6) & 0x3
+			}
 			colour := ppu.pallet[pIndex]
 			img.Set(bit, tileByte/2, colour)
 		}
 	}
-
-	// log.Printf("Updating tile cache for tile %d %04X", tileNum, tileDataAddr)
 
 	ppu.tiles[tileNum] = img
 }
@@ -107,8 +117,7 @@ func (ppu *PPU) updateSpriteCache(addr uint16) {
 
 func (ppu *PPU) render() {
 	// TODO: Remove this later, it's helpful for debugging
-	//randR := uint8(rand.Intn(255))
-	//ppu.screen.Fill(color.RGBA{randR, 255, 255, 255})
+	ppu.screen.Fill(color.RGBA{55, 55, 55, 255})
 
 	// Tile map is 9800-9BFF when LCDC bit 6 is NOT set
 	tileMap := uint16(TILE_MAP_0)
@@ -125,21 +134,21 @@ func (ppu *PPU) render() {
 	}
 
 	// get SCROLL_Y and SCROLL_X
-	scrollY := ppu.mapper.Read(SCROLL_Y)
-	scrollX := ppu.mapper.Read(SCROLL_X)
+	scrollY := float64(ppu.mapper.Read(SCROLL_Y))
+	// scrollX := float64(ppu.mapper.Read(SCROLL_X))
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position
 	for i := uint16(0); i < 1024; i++ {
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(float64((i%32)*8), float64((i/32)*8))
+		op.GeoM.Translate(float64((i%32)*8), float64((i/32)*8)-scrollY)
 
 		tilenum := int(ppu.mapper.Read(tileMap + i))
+
 		if tileOffset > 0 {
 			// Tile number is signed 8bit when LCDC bit 4 is NOT set
 			tilenum = int(int8(tilenum))
 		}
-		op.GeoM.Translate(float64(-scrollX), float64(-scrollY))
 
 		ppu.screen.DrawImage(ppu.tiles[tileOffset+tilenum], op)
 	}
@@ -161,7 +170,7 @@ func (ppu *PPU) render() {
 func (ppu *PPU) cycle(clockCycles int) {
 	ppu.dotCounter += clockCycles
 
-	if ppu.dotCounter > 1 {
+	if ppu.dotCounter > 456 {
 		ppu.dotCounter = 0
 
 		ppu.scanline++
@@ -170,7 +179,7 @@ func (ppu *PPU) cycle(clockCycles int) {
 			ppu.scanline = 0
 			ppu.render()
 
-			// request vblank interrupt
+			// Request vblank interrupt
 			ppu.mapper.requestInterrupt(0)
 		}
 

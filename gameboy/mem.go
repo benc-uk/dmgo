@@ -106,9 +106,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 			m.vram[addr-VRAM] = data
 
 			// Check for writes to the tile data
-			if addr >= TILE_DATA_0 && addr < TILE_MAP_0 && addr%16 == 15 {
-				// Only update the tile if it's the 16th byte in the tile
-				// TODO: This is more efficient but could it cause issues?
+			if addr >= TILE_DATA_0 && addr < TILE_MAP_0 {
 				m.ppu.updateTileCache(addr)
 			}
 		}
@@ -138,15 +136,19 @@ func (m *Mapper) Write(addr uint16, data byte) {
 	case addr >= IO && addr < HRAM:
 		{
 			m.io[addr-IO] = data
+			// Special case for disabling the boot ROM
+			if addr == BOOT_ROM_DISABLE && data == 0x01 {
+				log.Println("Disabling boot ROM")
+				m.bootROMLoaded = false
+			}
+			// if addr == INT_FLAG {
+			// 	log.Printf("IF:%08b", data)
+			// }
 		}
 
 	case addr >= HRAM && addr < INT_ENABLE:
 		{
 			m.hram[addr-HRAM] = data
-			// Special case for disabling the boot ROM
-			if addr == BOOT_ROM_DISABLE && data == 0x01 {
-				m.bootROMLoaded = false
-			}
 		}
 
 	case addr == INT_ENABLE:
