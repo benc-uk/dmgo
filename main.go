@@ -9,7 +9,6 @@ import (
 	"yarg/gameboy"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
@@ -21,6 +20,7 @@ var (
 const (
 	scale      = 4
 	clockSpeed = 4194304
+	FPS        = 60
 )
 
 type Game struct{}
@@ -55,18 +55,8 @@ func init() {
 
 // Update the game state by one tick, happens at 2Mhz or two dots
 func (g *Game) Update() error {
-	if inpututil.IsKeyJustPressed(ebiten.KeyQ) {
-		log.Println("Quitting...")
-		os.Exit(0)
-	}
 
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		gb.Cycle(true)
-		return nil
-	}
-
-	// Run the system for two dots (like a tick)
-	gb.Cycle(false)
+	gb.Update(clockSpeed / FPS)
 
 	return nil
 }
@@ -97,20 +87,20 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 
 // Entry point is here
 func main() {
-	romName := "roms/cpu_instrs.gb"
-	// romName := "roms/Tetris.gb"
-	if len(os.Args) > 1 {
-		romName = os.Args[1]
-	}
+	//romName := "roms/cpu_instrs.gb"
+	//romName := "roms/Tetris.gb"
+	//romName := "roms/DrMario.gb"
+	romName := "roms/PipeDream.gb"
+
+	// if len(os.Args) > 1 {
+	// 	romName = os.Args[1]
+	// }
 
 	gb = gameboy.NewGameboy()
+	gb.LoadROM(romName)
 	gb.Start()
 
-	//gb.LoadMemDump("roms/hello-world.dump")
-	gb.LoadROM(romName)
-
 	game := &Game{}
-	ebiten.SetTPS(clockSpeed / 2) // 4.19MHz but we run at half this for the PPU and CPU
 	ebiten.SetWindowSize(160*scale+500, 144*scale)
 	ebiten.SetWindowTitle("Gameboy Emulator (DMGO)")
 

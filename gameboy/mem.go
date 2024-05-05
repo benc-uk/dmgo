@@ -1,6 +1,8 @@
 package gameboy
 
-import "log"
+import (
+	"log"
+)
 
 const ROM_BANK = 0x4000
 const VRAM = 0x8000
@@ -13,11 +15,15 @@ const OAM_END = 0xFE9F
 const IO = 0xFF00
 const HRAM = 0xFF80
 const INT_ENABLE = 0xFFFF
+const INT_FLAG = 0xFF0F
 
 // HRAM register addresses
 const LCD_CONTROL = 0xFF40
 const LCD_STAT = 0xFF41
+const SCROLL_Y = 0xFF42
+const SCROLL_X = 0xFF43
 const LCD_Y = 0xFF44
+const BOOT_ROM_DISABLE = uint16(0xFF50)
 
 const TILE_DATA_0 = 0x8000
 const TILE_DATA_1 = 0x8800
@@ -51,7 +57,12 @@ type Mapper struct {
 	hram      []byte
 	interrupt byte
 
+	bootROM       []byte
+	bootROMLoaded bool
+
 	ppu *PPU
+
+	watches []uint16
 }
 
 func NewMapper() *Mapper {
@@ -64,6 +75,16 @@ func NewMapper() *Mapper {
 		oam:    make([]byte, 0x100),  // 160 bytes of OAM
 		io:     make([]byte, 0x80),   // 128 bytes of IO
 		hram:   make([]byte, 0x7F),   // 127 bytes of HRAM
+
+		watches: []uint16{},
+
+		bootROM:       make([]byte, 0x100),
+		bootROMLoaded: false,
+	}
+
+	// Fill rom0 with 0xFF, really to simulate having no cartridge inserted
+	for i := 0; i < 0x4000; i++ {
+		m.rom0[i] = 0xFF
 	}
 
 	return m
@@ -122,6 +143,10 @@ func (m *Mapper) Write(addr uint16, data byte) {
 	case addr >= HRAM && addr < INT_ENABLE:
 		{
 			m.hram[addr-HRAM] = data
+			// Special case for disabling the boot ROM
+			if addr == BOOT_ROM_DISABLE && data == 0x01 {
+				m.bootROMLoaded = false
+			}
 		}
 
 	case addr == INT_ENABLE:
@@ -131,7 +156,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 
 	case addr >= 0xFEA0 && addr <= 0xFEFF:
 		{
-			log.Fatalf("Invalid write to 0xFEA0-0xFEFF")
+			//log.Println("Invalid write to 0xFEA0-0xFEFF")
 		}
 
 	default:
@@ -144,6 +169,11 @@ func (m *Mapper) Write(addr uint16, data byte) {
 func (m Mapper) Read(addr uint16) byte {
 	switch {
 	case addr < ROM_BANK:
+		// Special case for the boot ROM overlay
+		if m.bootROMLoaded && addr < 0x100 {
+			return m.bootROM[addr]
+		}
+
 		return m.rom0[addr]
 	case addr >= ROM_BANK && addr < VRAM:
 		return m.rom1[addr-ROM_BANK]
@@ -163,8 +193,25 @@ func (m Mapper) Read(addr uint16) byte {
 		return m.hram[addr-HRAM]
 	case addr == INT_ENABLE:
 		return m.interrupt
+	// Invalid memory read
+	case addr >= 0xFEA0 && addr <= 0xFEFF:
+		{
+			return 0xFF
+		}
 	}
 
 	log.Fatalf("Invalid memory read at %04X", addr)
+
 	return 0
+}
+
+func (m *Mapper) requestInterrupt(interrupt byte) {
+	//log.Printf("Requesting interrupt %08b IE:%08b", interrupt, m.Read(INT_ENABLE))
+	// Get the interrupt enable bit for the interrupt
+	ie := m.Read(INT_ENABLE)
+	if ie&interrupt == interrupt {
+		// Set the interrupt flag
+		m.Write(INT_FLAG, m.Read(INT_FLAG)|interrupt)
+		//log.Printf("IF:%08b", m.Read(INT_FLAG))
+	}
 }
