@@ -9,18 +9,19 @@ import (
 	"yarg/gameboy"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"gopkg.in/yaml.v2"
 )
 
 var (
 	gb         *gameboy.Gameboy
 	faceSource *text.GoTextFaceSource
+	config     gameboy.Config
 )
 
 const (
-	scale      = 4
 	clockSpeed = 4194304
-	FPS        = 60
 )
 
 type Game struct{}
@@ -55,6 +56,12 @@ func init() {
 
 // Update the game state by the given delta time
 func (g *Game) Update() error {
+	// Check for step mode
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) && !gb.Running {
+		// Special case for telling the CPU to step
+		gb.Update(-1)
+	}
+
 	tps := int(ebiten.ActualTPS())
 	if tps <= 0 {
 		return nil
@@ -68,14 +75,14 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Main emulator screen
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(scale, scale)
+	op.GeoM.Scale(float64(config.Scale), float64(config.Scale))
 	op.Filter = ebiten.FilterLinear
 	screen.DrawImage(gb.GetScreen(), op)
 
 	// Debug info
 	msg := gb.GetDebugInfo()
 	textOp := &text.DrawOptions{}
-	textOp.GeoM.Translate(650, 20)
+	textOp.GeoM.Translate(float64(163*config.Scale), 20)
 	textOp.LineSpacing = 22
 
 	textOp.ColorScale.ScaleWithColor(color.RGBA{0x00, 0xee, 0x11, 0xff})
@@ -91,25 +98,39 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 
 // Entry point is here
 func main() {
-	//romName := "roms/cpu_instrs.gb"
-	//romName := "roms/Tetris.gb"
-	romName := "roms/DrMario.gb"
-	//romName := "roms/PipeDream.gb"
+	// Read config.yaml file
+	configFile, err := os.Open("./config.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer configFile.Close()
 
-	// if len(os.Args) > 1 {
-	// 	romName = os.Args[1]
-	// }
+	config, err = readConfig(configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	gb = gameboy.NewGameboy()
-	gb.LoadROM(romName)
-	gb.Start()
+	gb = gameboy.NewGameboy(config)
+	gb.LoadROM(config.ROM)
+	gb.Running = true
 
 	game := &Game{}
-	ebiten.SetWindowSize(160*scale+500, 144*scale)
+	ebiten.SetWindowSize(160*config.Scale+140*config.Scale, 144*config.Scale)
 	ebiten.SetWindowTitle("Gameboy Emulator (DMGO)")
 
 	// Call ebiten.RunGame to start
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func readConfig(file *os.File) (gameboy.Config, error) {
+	// Read the file
+	decoder := yaml.NewDecoder(file)
+	err := decoder.Decode(&config)
+	if err != nil {
+		return gameboy.Config{}, err
+	}
+
+	return config, nil
 }

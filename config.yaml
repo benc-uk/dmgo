@@ -1,0 +1,14 @@
+#rom: "roms/games/DrMario.gb"
+#rom: "roms/games/Tetris.gb"
+rom: "roms/games/Alleyway.gb"
+
+#rom: "roms/test/hello_world.gb"
+#rom: "roms/test/cpu_instrs.gb"
+
+logging: false
+bootROM: true
+
+breakpoints: []
+watches: [0xfe00, 0xfe01, 0xfe02, 0xffa6]
+
+scale: 4

@@ -1,6 +1,4 @@
-roms/Tetris.gb
-roms/DrMario.gb
-DMG_ROM.bin
+roms/games/**
 **/*.o
 tmp/
 *.exe

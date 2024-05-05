@@ -2,15 +2,17 @@
 
 Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.org/) for rendering and display
 
-![screen](./etc/screens/hello.png)
+![screen](./etc/screens/tetris-0.png)
 
 ## Status
 
-- Basic rendering of the VRAM contents via the PPU, with tilemaps and OAM sprites.
-- Primitive and very incorrect CPU and PPU timing clocks
-- A rubbish builtin debugger
-- About 13% of the opcodes
-- Almost nothing else
+- Boots some ROMs, and runs the Gameboy boot ROM if present
+- About 60% of the CPU opcodes
+- About 1% of the CB prefix opcodes
+- PPU: Functional rendering but incomplete (e.g. scanlines)
+- Timing: CPU and PPU mostly clock correct
+- No input
+- No sound
 
 ## Reference Collection
 

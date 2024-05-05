@@ -17,12 +17,17 @@ const HRAM = 0xFF80
 const INT_ENABLE = 0xFFFF
 const INT_FLAG = 0xFF0F
 
-// HRAM register addresses
+// IO Registers
+const JOYP = 0xFF00
+const DIV = 0xFF04
+const TIMA = 0xFF05
+const TMA = 0xFF06
 const LCD_CONTROL = 0xFF40
 const LCD_STAT = 0xFF41
 const SCROLL_Y = 0xFF42
 const SCROLL_X = 0xFF43
 const LCD_Y = 0xFF44
+const DMA_OAM = 0xFF46
 const BOOT_ROM_DISABLE = uint16(0xFF50)
 
 const TILE_DATA_0 = 0x8000
@@ -135,15 +140,34 @@ func (m *Mapper) Write(addr uint16, data byte) {
 
 	case addr >= IO && addr < HRAM:
 		{
+			// HACK: TEMPORARY - Ignore writes to the JOYP register
+			if addr == JOYP {
+				//log.Printf("JOYP write was blocked: %08b", data)
+				return
+			}
+
+			if addr == DIV {
+				// Writing to the DIV register resets the counter
+				m.io[addr-IO] = 0
+				return
+			}
+
+			if addr == DMA_OAM {
+				m.io[addr-IO] = data
+				for i := 0; i < 0xA0; i++ {
+					// Source address is divided by 0x100 for some reason
+					m.Write(OAM+uint16(i), m.Read(uint16(data)*0x100+uint16(i)))
+				}
+				return
+			}
+
 			m.io[addr-IO] = data
+
 			// Special case for disabling the boot ROM
 			if addr == BOOT_ROM_DISABLE && data == 0x01 {
 				log.Println("Disabling boot ROM")
 				m.bootROMLoaded = false
 			}
-			// if addr == INT_FLAG {
-			// 	log.Printf("IF:%08b", data)
-			// }
 		}
 
 	case addr >= HRAM && addr < INT_ENABLE:
@@ -207,13 +231,9 @@ func (m Mapper) Read(addr uint16) byte {
 	return 0
 }
 
-func (m *Mapper) requestInterrupt(interrupt byte) {
-	//log.Printf("Requesting interrupt %08b IE:%08b", interrupt, m.Read(INT_ENABLE))
-	// Get the interrupt enable bit for the interrupt
-	ie := m.Read(INT_ENABLE)
-	if ie&interrupt == interrupt {
-		// Set the interrupt flag
-		m.Write(INT_FLAG, m.Read(INT_FLAG)|interrupt)
-		//log.Printf("IF:%08b", m.Read(INT_FLAG))
-	}
+func (m *Mapper) requestInterrupt(interruptBit byte) {
+	interruptByte := m.Read(INT_FLAG)
+	interruptByte |= interruptBit
+	m.Write(INT_FLAG, interruptByte)
+	//log.Printf("Requesting interrupt: %08b", interruptByte)
 }

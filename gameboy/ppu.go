@@ -116,9 +116,6 @@ func (ppu *PPU) updateSpriteCache(addr uint16) {
 }
 
 func (ppu *PPU) render() {
-	// TODO: Remove this later, it's helpful for debugging
-	ppu.screen.Fill(color.RGBA{55, 55, 55, 255})
-
 	// Tile map is 9800-9BFF when LCDC bit 6 is NOT set
 	tileMap := uint16(TILE_MAP_0)
 	if ppu.GetLCDCBit(3) == 1 {
@@ -135,7 +132,6 @@ func (ppu *PPU) render() {
 
 	// get SCROLL_Y and SCROLL_X
 	scrollY := float64(ppu.mapper.Read(SCROLL_Y))
-	// scrollX := float64(ppu.mapper.Read(SCROLL_X))
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position
@@ -163,13 +159,14 @@ func (ppu *PPU) render() {
 		screenY := int(sprite.y) - 16
 		screenX := int(sprite.x) - 8
 		op.GeoM.Translate(float64(screenX), float64(screenY))
-		ppu.screen.DrawImage(ppu.tiles[sprite.tile], op)
+		ppu.screen.DrawImage(ppu.tiles[tileOffset+int(sprite.tile)], op)
 	}
 }
 
 func (ppu *PPU) cycle(clockCycles int) {
 	ppu.dotCounter += clockCycles
 
+	// TODO: This is all wrong?
 	if ppu.dotCounter > 456 {
 		ppu.dotCounter = 0
 
@@ -180,7 +177,7 @@ func (ppu *PPU) cycle(clockCycles int) {
 			ppu.render()
 
 			// Request vblank interrupt
-			ppu.mapper.requestInterrupt(0)
+			ppu.mapper.requestInterrupt(INT_VBLANK)
 		}
 
 		ppu.mapper.Write(0xFF44, ppu.scanline)

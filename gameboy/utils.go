@@ -31,3 +31,8 @@ func swapNibbles(b byte) byte {
 func bitReset(b byte, bit uint) byte {
 	return b &^ (1 << bit)
 }
+
+// Set given bit in the byte to 1
+func bitSet(b byte, bit uint) byte {
+	return b | (1 << bit)
+}
