@@ -94,6 +94,20 @@ func (cpu *CPU) byteAdd(a, b byte) byte {
 	return result
 }
 
+// Performs 8-bit addition with carry between two bytes and sets the flags accordingly
+func (cpu *CPU) byteAddCarry(a, b byte) byte {
+	cpu.logMessage("--- ADC: a:%02X, b:%02X", a, b)
+	carry := byte(BoolToInt(cpu.getFlagC()))
+	result := a + b + carry
+
+	cpu.setFlagZ(result == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH((a&0xF)+(b&0xF)+carry > 0xF)
+	cpu.setFlagC(uint16(a)+uint16(b)+uint16(carry) > 0xFF)
+
+	return result
+}
+
 func (cpu *CPU) wordAdd(a, b uint16) uint16 {
 	cpu.logMessage("--- WADD: a:%04X, b:%04X", a, b)
 	result := a + b

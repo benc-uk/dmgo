@@ -168,35 +168,35 @@ var opcodes = [0x100]func(cpu *CPU){
 	},
 
 	// DAA
-	// 0x27: func(cpu *CPU) {
-	// 	a := cpu.A()
-	// 	c := cpu.getFlagC()
-	// 	h := cpu.getFlagH()
-	// 	n := cpu.getFlagN()
+	0x27: func(cpu *CPU) {
+		a := cpu.A()
+		c := cpu.getFlagC()
+		h := cpu.getFlagH()
+		n := cpu.getFlagN()
 
-	// 	if !n {
-	// 		if c || a > 0x99 {
-	// 			a += 0x60
-	// 			cpu.setFlagC(true)
-	// 		}
+		if !n {
+			if c || a > 0x99 {
+				a += 0x60
+				cpu.setFlagC(true)
+			}
 
-	// 		if h || a&0x0F > 0x09 {
-	// 			a += 0x06
-	// 		}
-	// 	} else {
-	// 		if c {
-	// 			a -= 0x60
-	// 		}
+			if h || a&0x0F > 0x09 {
+				a += 0x06
+			}
+		} else {
+			if c {
+				a -= 0x60
+			}
 
-	// 		if h {
-	// 			a -= 0x06
-	// 		}
-	// 	}
+			if h {
+				a -= 0x06
+			}
+		}
 
-	// 	cpu.setA(a)
-	// 	cpu.setFlagZ(a == 0)
-	// 	cpu.setFlagH(false)
-	// },
+		cpu.setA(a)
+		cpu.setFlagZ(a == 0)
+		cpu.setFlagH(false)
+	},
 
 	// DEC HL
 	0x2B: func(cpu *CPU) { cpu.HL-- },
@@ -467,11 +467,50 @@ var opcodes = [0x100]func(cpu *CPU){
 	// ADD A
 	0x87: func(cpu *CPU) { cpu.setA(cpu.byteAdd(cpu.A(), cpu.A())) },
 
+	// ADC A, B
+	0x88: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.B())) },
+
+	// ADC A, C
+	0x89: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.C())) },
+
+	// ADC A, D
+	0x8A: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.D())) },
+
+	// ADC A, E
+	0x8B: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.E())) },
+
+	// ADC A, H
+	0x8C: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.H())) },
+
+	// ADC A, L
+	0x8D: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.L())) },
+
+	// ADC A, (HL)
+	0x8E: func(cpu *CPU) { cpu.setA(cpu.byteAddCarry(cpu.A(), cpu.mapper.Read(cpu.HL))) },
+
 	// SUB A, B
 	0x90: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.B())) },
 
+	// AND B
+	0xA0: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.B())) },
+
 	// AND C
 	0xA1: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.C())) },
+
+	// AND D
+	0xA2: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.D())) },
+
+	// AND E
+	0xA3: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.E())) },
+
+	// AND H
+	0xA4: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.H())) },
+
+	// AND L
+	0xA5: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.L())) },
+
+	// AND (HL)
+	0xA6: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.mapper.Read(cpu.HL))) },
 
 	// AND A
 	0xA7: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.A())) },
@@ -523,8 +562,29 @@ var opcodes = [0x100]func(cpu *CPU){
 	// OR A, A
 	0xB7: func(cpu *CPU) { cpu.setA(cpu.byteOR(cpu.A(), cpu.A())) },
 
+	// CP B
+	0xB8: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.B()) },
+
+	// CP C
+	0xB9: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.C()) },
+
+	// CP D
+	0xBA: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.D()) },
+
+	// CP E
+	0xBB: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.E()) },
+
+	// CP H
+	0xBC: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.H()) },
+
+	// CP L
+	0xBD: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.L()) },
+
 	// CP A, [HL]
 	0xBE: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.mapper.Read(cpu.HL)) },
+
+	// CP A
+	0xBF: func(cpu *CPU) { cpu.cmp(cpu.A(), cpu.A()) },
 
 	// RET NZ
 	0xC0: func(cpu *CPU) {
@@ -593,8 +653,30 @@ var opcodes = [0x100]func(cpu *CPU){
 	// CALL nn
 	0xCD: func(cpu *CPU) { cpu.callSub(cpu.fetchPC16()) },
 
+	// RET NC
+	0xD0: func(cpu *CPU) {
+		if !cpu.getFlagC() {
+			cpu.returnSub()
+		}
+	},
+
 	// POP DE
 	0xD1: func(cpu *CPU) { cpu.DE = cpu.popStack() },
+
+	// JP NC, nn
+	0xD2: func(cpu *CPU) {
+		if !cpu.getFlagC() {
+			cpu.PC = cpu.fetchPC16()
+		}
+	},
+
+	// CALL NC, nn
+	0xD4: func(cpu *CPU) {
+		nn := cpu.fetchPC16()
+		if !cpu.getFlagC() {
+			cpu.callSub(nn)
+		}
+	},
 
 	// PUSH DE
 	0xD5: func(cpu *CPU) { cpu.pushStack(cpu.DE) },
