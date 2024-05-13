@@ -21,6 +21,18 @@ var opcodes = [0x100]func(cpu *CPU){
 	// LD B, n
 	0x06: func(cpu *CPU) { cpu.setB(cpu.fetchPC()) },
 
+	// RLCA
+	0x07: func(cpu *CPU) {
+		value := cpu.A()
+		result := byte(value<<1) | byte(value>>7)
+
+		cpu.setA(result)
+		cpu.setFlagZ(false)
+		cpu.setFlagN(false)
+		cpu.setFlagH(false)
+		cpu.setFlagC(value > 0x7F)
+	},
+
 	// LD HL, BC
 	0x09: func(cpu *CPU) { cpu.HL = cpu.wordAdd(cpu.HL, cpu.BC) },
 
@@ -47,6 +59,9 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// INC DE
 	0x13: func(cpu *CPU) { cpu.DE++ },
+
+	// INC D
+	0x14: func(cpu *CPU) { cpu.setD(cpu.byteInc(cpu.D())) },
 
 	// DEC D
 	0x15: func(cpu *CPU) { cpu.setD(cpu.byteDec(cpu.D())) },
@@ -92,6 +107,23 @@ var opcodes = [0x100]func(cpu *CPU){
 	// LD E, n
 	0x1E: func(cpu *CPU) { cpu.setE(cpu.fetchPC()) },
 
+	// RRA
+	0x1F: func(cpu *CPU) {
+		value := cpu.A()
+		var carry byte
+		if cpu.getFlagC() {
+			carry = 0x80
+		}
+
+		result := byte(value>>1) + carry
+
+		cpu.setA(result)
+		cpu.setFlagZ(false)
+		cpu.setFlagN(false)
+		cpu.setFlagH(false)
+		cpu.setFlagC(value&1 == 1)
+	},
+
 	// JR NZ,e
 	0x20: func(cpu *CPU) {
 		e := cpu.fetchPC() // Important fetch & inc PC before the condition!
@@ -114,6 +146,12 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// INC H
 	0x24: func(cpu *CPU) { cpu.setH(cpu.byteInc(cpu.H())) },
+
+	// DEC H
+	0x25: func(cpu *CPU) { cpu.setH(cpu.byteDec(cpu.H())) },
+
+	// LD H, n
+	0x26: func(cpu *CPU) { cpu.setH(cpu.fetchPC()) },
 
 	// JR Z, e
 	0x28: func(cpu *CPU) {
@@ -177,6 +215,14 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.setA(^cpu.A())
 		cpu.setFlagN(true)
 		cpu.setFlagH(true)
+	},
+
+	// JR NC, e
+	0x30: func(cpu *CPU) {
+		e := cpu.fetchPC() // Important fetch & inc PC before the condition!
+		if !cpu.getFlagC() {
+			cpu.PC += uint16(int8(e))
+		}
 	},
 
 	// LD SP, nn
@@ -352,6 +398,25 @@ var opcodes = [0x100]func(cpu *CPU){
 	// LD L, A
 	0x6F: func(cpu *CPU) { cpu.setL(cpu.A()) },
 
+	// LD (HL), B
+	0x70: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.B()) },
+
+	// LD (HL), C
+	0x71: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.C()) },
+
+	// LD (HL), D
+	0x72: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.D()) },
+
+	// LD (HL), E
+	0x73: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.E()) },
+
+	// LD (HL), H
+	0x74: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.H()) },
+
+	// LD (HL), L
+	0x75: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.L()) },
+
+	// HALT
 	0x76: func(cpu *CPU) { cpu.halted = true },
 
 	// LD (HL), A
@@ -430,6 +495,9 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// XOR A, L
 	0xAD: func(cpu *CPU) { cpu.setA(cpu.byteXOR(cpu.A(), cpu.L())) },
+
+	// XOR A, (HL)
+	0xAE: func(cpu *CPU) { cpu.setA(cpu.byteXOR(cpu.A(), cpu.mapper.Read(cpu.HL))) },
 
 	// XOR A, A
 	0xAF: func(cpu *CPU) { cpu.setA(cpu.byteXOR(cpu.A(), cpu.A())) },
@@ -581,6 +649,9 @@ var opcodes = [0x100]func(cpu *CPU){
 	// LD (nn), A
 	0xEA: func(cpu *CPU) { cpu.mapper.Write(cpu.fetchPC16(), cpu.A()) },
 
+	// XOR A, n
+	0xEE: func(cpu *CPU) { cpu.setA(cpu.byteXOR(cpu.A(), cpu.fetchPC())) },
+
 	// RST 28H
 	0xEF: func(cpu *CPU) { cpu.callSub(0x0028) },
 
@@ -597,6 +668,9 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// PUSH AF
 	0xF5: func(cpu *CPU) { cpu.pushStack(cpu.AF) },
+
+	// OR A, n
+	0xF6: func(cpu *CPU) { cpu.setA(cpu.byteOR(cpu.A(), cpu.fetchPC())) },
 
 	// LD A, (nn)
 	0xFA: func(cpu *CPU) { cpu.setA(cpu.mapper.Read(cpu.fetchPC16())) },

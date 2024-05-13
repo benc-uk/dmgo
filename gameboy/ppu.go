@@ -131,7 +131,7 @@ func (ppu *PPU) render() {
 	}
 
 	// get SCROLL_Y and SCROLL_X
-	scrollY := float64(ppu.mapper.Read(SCROLL_Y))
+	scrollY := float64(ppu.mapper.Read(SCY))
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position
@@ -194,5 +194,5 @@ func (ppu *PPU) cycle(clockCycles int) {
 // Bit 1 - OBJ Display Enable (0=Off, 1=On)
 // Bit 0 - BG/Window Display/Priority (0=Off, 1=On)
 func (ppu *PPU) GetLCDCBit(bit byte) byte {
-	return ppu.mapper.Read(LCD_CONTROL) >> bit & 1
+	return ppu.mapper.Read(LCDC) >> bit & 1
 }

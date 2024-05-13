@@ -2,3 +2,4 @@ roms/games/**
 **/*.o
 tmp/
 *.exe
+*boot*.bin

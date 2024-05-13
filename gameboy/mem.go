@@ -6,34 +6,42 @@ import (
 
 const ROM_BANK = 0x4000
 const VRAM = 0x8000
-const VRAM_CONT = 0x9000
 const EXT_RAM = 0xA000
 const WRAM = 0xC000
 const ECHO_RAM = 0xE000
 const OAM = 0xFE00
-const OAM_END = 0xFE9F
+const NOT_USABLE = 0xFEA0
 const IO = 0xFF00
 const HRAM = 0xFF80
-const INT_ENABLE = 0xFFFF
-const INT_FLAG = 0xFF0F
 
 // IO Registers
 const JOYP = 0xFF00
+const SB = 0xFF01
+const SC = 0xFF02
 const DIV = 0xFF04
 const TIMA = 0xFF05
 const TMA = 0xFF06
-const LCD_CONTROL = 0xFF40
-const LCD_STAT = 0xFF41
-const SCROLL_Y = 0xFF42
-const SCROLL_X = 0xFF43
-const LCD_Y = 0xFF44
-const DMA_OAM = 0xFF46
-const BOOT_ROM_DISABLE = uint16(0xFF50)
+const TAC = 0xFF07
+const IF = 0xFF0F
+const LCDC = 0xFF40
+const STAT = 0xFF41
+const SCY = 0xFF42
+const SCX = 0xFF43
+const LY = 0xFF44
+const LYC = 0xFF45
+const DMA = 0xFF46
+const BGP = 0xFF47
+const OBP0 = 0xFF48
+const OBP1 = 0xFF49
+const WY = 0xFF4A
+const WX = 0xFF4B
+const BOOT_ROM_DISABLE = 0xFF50
+const IE = 0xFFFF
 
+// VRAM offests
 const TILE_DATA_0 = 0x8000
 const TILE_DATA_1 = 0x8800
 const TILE_DATA_2 = 0x9000
-
 const TILE_MAP_0 = 0x9800
 const TILE_MAP_1 = 0x9C00
 
@@ -62,8 +70,7 @@ type Mapper struct {
 	hram      []byte
 	interrupt byte
 
-	bootROM       []byte
-	bootROMLoaded bool
+	bootROM []byte
 
 	ppu *PPU
 
@@ -82,12 +89,9 @@ func NewMapper() *Mapper {
 		hram:   make([]byte, 0x7F),   // 127 bytes of HRAM
 
 		watches: []uint16{},
-
-		bootROM:       make([]byte, 0x100),
-		bootROMLoaded: false,
 	}
 
-	// Fill rom0 with 0xFF, really to simulate having no cartridge inserted
+	// Fill rom0 with 0xFF, really just to simulate having no cartridge inserted
 	for i := 0; i < 0x4000; i++ {
 		m.rom0[i] = 0xFF
 	}
@@ -99,11 +103,13 @@ func (m *Mapper) Write(addr uint16, data byte) {
 	switch {
 	case addr < ROM_BANK:
 		{
-			m.rom0[addr] = data
+			// Ignore writes to the ROM bank 0
+			//m.rom0[addr] = data
 		}
 	case addr >= ROM_BANK && addr < VRAM:
 		{
-			m.rom1[addr-ROM_BANK] = data
+			// Ignore writes to the ROM bank 1
+			//m.rom1[addr-ROM_BANK] = data
 		}
 
 	case addr >= VRAM && addr < EXT_RAM:
@@ -132,7 +138,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 			m.wram[addr-ECHO_RAM] = data
 		}
 
-	case addr >= OAM && addr <= OAM_END:
+	case addr >= OAM && addr < NOT_USABLE:
 		{
 			m.oam[addr-OAM] = data
 			m.ppu.updateSpriteCache(addr)
@@ -152,7 +158,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 				return
 			}
 
-			if addr == DMA_OAM {
+			if addr == DMA {
 				m.io[addr-IO] = data
 				for i := 0; i < 0xA0; i++ {
 					// Source address is divided by 0x100 for some reason
@@ -162,26 +168,21 @@ func (m *Mapper) Write(addr uint16, data byte) {
 			}
 
 			m.io[addr-IO] = data
-
-			// Special case for disabling the boot ROM
-			if addr == BOOT_ROM_DISABLE && data == 0x01 {
-				log.Println("Disabling boot ROM")
-				m.bootROMLoaded = false
-			}
 		}
 
-	case addr >= HRAM && addr < INT_ENABLE:
+	case addr >= HRAM && addr < IE:
 		{
 			m.hram[addr-HRAM] = data
 		}
 
-	case addr == INT_ENABLE:
+	case addr == IE:
 		{
 			m.interrupt = data
 		}
 
 	case addr >= 0xFEA0 && addr <= 0xFEFF:
 		{
+			// Writing to this range is prohibited, but we can just ignore it
 			//log.Println("Invalid write to 0xFEA0-0xFEFF")
 		}
 
@@ -195,8 +196,8 @@ func (m *Mapper) Write(addr uint16, data byte) {
 func (m Mapper) Read(addr uint16) byte {
 	switch {
 	case addr < ROM_BANK:
-		// Special case for the boot ROM overlay
-		if m.bootROMLoaded && addr < 0x100 {
+		// Special case for the boot ROM, which is overlaid on the first 256 bytes of memory
+		if addr < 0x100 && m.bootROMEnabled() {
 			return m.bootROM[addr]
 		}
 
@@ -211,13 +212,13 @@ func (m Mapper) Read(addr uint16) byte {
 		return m.wram[addr-WRAM]
 	case addr >= ECHO_RAM && addr < OAM:
 		return m.wram[addr-ECHO_RAM]
-	case addr >= OAM && addr <= OAM_END:
+	case addr >= OAM && addr < NOT_USABLE:
 		return m.oam[addr-OAM]
 	case addr >= IO && addr < HRAM:
 		return m.io[addr-IO]
-	case addr >= HRAM && addr < INT_ENABLE:
+	case addr >= HRAM && addr < IE:
 		return m.hram[addr-HRAM]
-	case addr == INT_ENABLE:
+	case addr == IE:
 		return m.interrupt
 	// Invalid memory read
 	case addr >= 0xFEA0 && addr <= 0xFEFF:
@@ -232,8 +233,22 @@ func (m Mapper) Read(addr uint16) byte {
 }
 
 func (m *Mapper) requestInterrupt(interruptBit byte) {
-	interruptByte := m.Read(INT_FLAG)
+	interruptByte := m.Read(IF)
 	interruptByte |= interruptBit
-	m.Write(INT_FLAG, interruptByte)
+	m.Write(IF, interruptByte)
 	//log.Printf("Requesting interrupt: %08b", interruptByte)
+}
+
+func (m *Mapper) bootROMEnabled() bool {
+	return len(m.bootROM) > 0 && m.Read(BOOT_ROM_DISABLE) == 0
+}
+
+func (m *Mapper) loadBootROM(data []byte) {
+	log.Printf("Configuring boot ROM")
+	if len(data) != 0x100 {
+		log.Fatalf("Boot ROM is not the correct size, got %d bytes, expected 256 bytes", len(data))
+	}
+
+	m.Write(BOOT_ROM_DISABLE, 0x00) // ENABLE the boot ROM
+	m.bootROM = data
 }

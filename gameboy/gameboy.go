@@ -2,6 +2,7 @@ package gameboy
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -24,7 +25,7 @@ type Config struct {
 	Logging     bool     `yaml:"logging"`
 	Breakpoints []uint16 `yaml:"breakpoints"`
 	Watches     []uint16 `yaml:"watches"`
-	BootROM     bool     `yaml:"bootROM"`
+	BootROM     string   `yaml:"bootROM"`
 }
 
 type Gameboy struct {
@@ -39,12 +40,14 @@ type Gameboy struct {
 }
 
 func NewGameboy(config Config) *Gameboy {
+	log.Println("Initializing Gameboy")
+
 	mapper := NewMapper()
 	cpu := NewCPU(mapper)
 
 	gb := Gameboy{
 		mapper:  mapper,
-		ppu:     NewPPU(mapper),
+		ppu:     NewPPU(mapper), // Bidirectional dependency here
 		cpu:     cpu,
 		Running: false,
 
@@ -53,32 +56,32 @@ func NewGameboy(config Config) *Gameboy {
 
 	// Set up the initial state of the Gameboy
 	mapper.io[0x00] = 0xf
-	mapper.Write(0xff50, 0x00) // ENABLE the boot ROM
-	mapper.Write(0xff40, 0x91) // Set the LCDC register
-	mapper.Write(0xff41, 0x81) // Set the STAT register
-	mapper.Write(0xff44, 0x90) // Set the scanline to 144
-	mapper.Write(0xff47, 0xE4) // Set the background palette
 
-	if config.BootROM {
-		// Load the boot ROM from res/dmg_boot.bin
-		// If it fails, the boot ROM will be skipped and not used
-		mapper.bootROMLoaded = true
-		bootROMFile, err := os.Open("res/dmg_boot.bin")
+	mapper.Write(LCDC, 0x91) // Set the LCDC register
+	mapper.Write(STAT, 0x81) // Set the STAT register
+	mapper.Write(LY, 0x90)   // Set the scanline to 144
+	mapper.Write(BGP, 0xE4)  // Set the background palette
+
+	// Optional boot ROM, not needed but included for authenticity
+	if config.BootROM != "" {
+		bootROMFile, err := os.Open(config.BootROM)
 		if err != nil {
-			mapper.bootROMLoaded = false
-		} else {
-			_, err = bootROMFile.Read(mapper.bootROM)
-			if err != nil {
-				mapper.bootROMLoaded = false
-			}
-			log.Println("Boot ROM loaded OK")
+			log.Fatal(err)
 		}
+
+		br, err := io.ReadAll(bootROMFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		mapper.loadBootROM(br)
 	}
 
-	if !mapper.bootROMLoaded {
-		log.Println("Boot ROM not loaded, it will be disabled")
-		mapper.Write(0xff50, 0x01) // DISABLE the boot ROM
-		// Set the initial PC to 0x100 which is where the game ROM starts
+	if !mapper.bootROMEnabled() {
+		log.Println("Boot ROM not available, it will be disabled")
+		// DISABLE the boot ROM
+		mapper.Write(BOOT_ROM_DISABLE, 0x01)
+		// PC to 0x100, this is where PC would be after the boot ROM
 		cpu.PC = 0x100
 	}
 
@@ -95,7 +98,7 @@ func NewGameboy(config Config) *Gameboy {
 	return &gb
 }
 
-// Update runs the system
+// Update runs the system each frame
 func (gb *Gameboy) Update(cyclesPerFrame int) {
 	// This is how we step manually
 	if cyclesPerFrame <= 0 {
@@ -137,19 +140,21 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 	gb.updateTimers(cycles)
 
 	// Read serial input
-	hasData := gb.mapper.Read(0xff02)
+	hasData := gb.mapper.Read(SC)
 	if hasData == 0x81 {
 		// Read the data from the serial port
-		data := gb.mapper.Read(0xff01)
+		data := gb.mapper.Read(SB)
 		log.Printf("Serial data read: %c\n", data)
-		gb.mapper.Write(0xff02, 0x00)
+		gb.mapper.Write(SC, 0x01)
+
+		gb.mapper.requestInterrupt(INT_SERIAL)
 	}
 }
 
 func (gb *Gameboy) checkInterrupts() int {
 	// Check for interrupts
 	if gb.cpu.IME {
-		interrupts := gb.mapper.Read(INT_FLAG) & gb.mapper.Read(INT_ENABLE)
+		interrupts := gb.mapper.Read(IF) & gb.mapper.Read(IE)
 		if interrupts != 0 {
 			if logging {
 				log.Printf("Interrupts: %08b\n", interrupts)
@@ -228,7 +233,7 @@ func (gb *Gameboy) GetDebugInfo() string {
 	out += fmt.Sprintf("A:%02X B:%02X C:%02X D:%02X E:%02X H:%02X L:%02X\n",
 		cpu.A(), cpu.B(), cpu.C(), cpu.D(), cpu.E(), cpu.H(), cpu.L())
 	out += fmt.Sprintf("AF:%04X BC:%04X DE:%04X HL:%04X SP:%04X\n", cpu.AF, cpu.BC, cpu.DE, cpu.HL, cpu.SP)
-	out += fmt.Sprintf("IE:%08b IF:%08b IME:%d\n", gb.mapper.Read(INT_ENABLE), gb.mapper.Read(INT_FLAG), BoolToInt(cpu.IME))
+	out += fmt.Sprintf("IE:%08b IF:%08b IME:%d\n", gb.mapper.Read(IE), gb.mapper.Read(IF), BoolToInt(cpu.IME))
 
 	// Flags
 	out += fmt.Sprintf("Z:%d N:%d H:%d C:%d\n\n",

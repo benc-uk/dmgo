@@ -67,13 +67,14 @@ func (g *Game) Update() error {
 		return nil
 	}
 
+	// Main emulator loop
 	gb.Update(clockSpeed / tps)
 
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	// Main emulator screen
+	// Render emulator screen
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(float64(config.Scale), float64(config.Scale))
 	op.Filter = ebiten.FilterLinear
@@ -111,7 +112,11 @@ func main() {
 	}
 
 	gb = gameboy.NewGameboy(config)
-	gb.LoadROM(config.ROM)
+	if config.ROM != "" {
+		gb.LoadROM(config.ROM)
+	} else {
+		log.Println("No game cart ROM specified, booting without a cart")
+	}
 	gb.Running = true
 
 	game := &Game{}

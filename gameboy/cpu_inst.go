@@ -190,3 +190,82 @@ func (cpu *CPU) shiftLeftArithmetic(val byte) byte {
 
 	return shifted
 }
+
+func (cpu *CPU) rotRight(val byte) byte {
+	cpu.logMessage("--- RR: %02X", val)
+	newCarry := val & 1
+	oldCarry := byte(BoolToInt(cpu.getFlagC()))
+	rot := (val >> 1) | (oldCarry << 7)
+
+	cpu.setFlagZ(rot == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(newCarry == 1)
+
+	return rot
+}
+
+func (cpu *CPU) rotRightCarry(val byte) byte {
+	cpu.logMessage("--- RRC: %02X", val)
+	newCarry := val & 1
+	rot := (val >> 1) | (val << 7)
+
+	cpu.setFlagZ(rot == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(newCarry == 1)
+
+	return rot
+}
+
+func (cpu *CPU) shiftRightArithmetic(val byte) byte {
+	cpu.logMessage("--- SRA: %02X", val)
+	newCarry := val & 1
+	shifted := (val >> 1) | (val & 0x80)
+
+	cpu.setFlagZ(shifted == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(newCarry == 1)
+
+	return shifted
+}
+
+func (cpu *CPU) shiftRightLogical(val byte) byte {
+	cpu.logMessage("--- SRL: %02X", val)
+	newCarry := val & 1
+	shifted := val >> 1
+
+	cpu.setFlagZ(shifted == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(newCarry == 1)
+
+	return shifted
+}
+
+func (cpu *CPU) rotLeftCarry(val byte) byte {
+	cpu.logMessage("--- RLC: %02X", val)
+	newCarry := val >> 7
+	rot := (val << 1) | newCarry
+
+	cpu.setFlagZ(rot == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(newCarry == 1)
+
+	return rot
+}
+
+// Swaps the nibbles of a byte
+func (cpu *CPU) swapNibbles(val byte) byte {
+	cpu.logMessage("--- SWAP: %02X", val)
+	swapped := val<<4 | val>>4
+
+	cpu.setFlagZ(swapped == 0)
+	cpu.setFlagN(false)
+	cpu.setFlagH(false)
+	cpu.setFlagC(false)
+
+	return swapped
+}
