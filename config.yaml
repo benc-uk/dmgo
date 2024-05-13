@@ -1,6 +1,6 @@
 #rom: "roms/games/DrMario.gb"
-rom: "roms/games/Tetris.gb"
-#rom: "roms/games/Alleyway.gb"
+#rom: "roms/games/Tetris.gb"
+rom: "roms/games/Alleyway.gb"
 #rom: "roms/games/PipeDream.gb"
 
 #rom: "roms/test/hello_world.gb"
