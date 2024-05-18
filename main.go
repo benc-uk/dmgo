@@ -1,12 +1,12 @@
 package main
 
 import (
+	"dmgo/gameboy"
 	"image"
 	"image/color"
 	"image/png"
 	"log"
 	"os"
-	"yarg/gameboy"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -22,6 +22,7 @@ var (
 
 const (
 	clockSpeed = 4194304
+	scale      = 4
 )
 
 type Game struct{}
@@ -67,6 +68,54 @@ func (g *Game) Update() error {
 		return nil
 	}
 
+	if inpututil.IsKeyJustPressed(ebiten.KeyRight) {
+		gb.Buttons.Set("Right", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyRight) {
+		gb.Buttons.Set("Right", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyLeft) {
+		gb.Buttons.Set("Left", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyLeft) {
+		gb.Buttons.Set("Left", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
+		gb.Buttons.Set("Up", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyUp) {
+		gb.Buttons.Set("Up", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyDown) {
+		gb.Buttons.Set("Down", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyDown) {
+		gb.Buttons.Set("Down", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+		gb.Buttons.Set("A", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyA) {
+		gb.Buttons.Set("A", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		gb.Buttons.Set("B", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyS) {
+		gb.Buttons.Set("B", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		gb.Buttons.Set("Start", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyEnter) {
+		gb.Buttons.Set("Start", false)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+		gb.Buttons.Set("Select", true)
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyBackspace) {
+		gb.Buttons.Set("Select", false)
+	}
+
 	// Main emulator loop
 	gb.Update(clockSpeed / tps)
 
@@ -76,14 +125,14 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Render emulator screen
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(float64(config.Scale), float64(config.Scale))
+	op.GeoM.Scale(float64(scale), float64(scale))
 	op.Filter = ebiten.FilterLinear
 	screen.DrawImage(gb.GetScreen(), op)
 
 	// Debug info
 	msg := gb.GetDebugInfo()
 	textOp := &text.DrawOptions{}
-	textOp.GeoM.Translate(float64(163*config.Scale), 20)
+	textOp.GeoM.Translate(float64(163*scale), 20)
 	textOp.LineSpacing = 22
 
 	textOp.ColorScale.ScaleWithColor(color.RGBA{0x00, 0xee, 0x11, 0xff})
@@ -112,15 +161,16 @@ func main() {
 	}
 
 	gb = gameboy.NewGameboy(config)
-	if config.ROM != "" {
-		gb.LoadROM(config.ROM)
+	if len(os.Args) > 1 {
+		gb.LoadROM(os.Args[1])
 	} else {
 		log.Println("No game cart ROM specified, booting without a cart")
 	}
+
 	gb.Running = true
 
 	game := &Game{}
-	ebiten.SetWindowSize(160*config.Scale+140*config.Scale, 144*config.Scale)
+	ebiten.SetWindowSize(160*scale+140*scale, 144*scale)
 	ebiten.SetWindowTitle("Gameboy Emulator (DMGO)")
 
 	// Call ebiten.RunGame to start

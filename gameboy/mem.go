@@ -38,13 +38,6 @@ const WX = 0xFF4B
 const BOOT_ROM_DISABLE = 0xFF50
 const IE = 0xFFFF
 
-// VRAM offests
-const TILE_DATA_0 = 0x8000
-const TILE_DATA_1 = 0x8800
-const TILE_DATA_2 = 0x9000
-const TILE_MAP_0 = 0x9800
-const TILE_MAP_1 = 0x9C00
-
 // Gameboy Memory Map
 // 0x0000-0x3FFF: 16KB ROM Bank 00 (in cartridge, fixed at bank 00)
 // 0x4000-0x7FFF: 16KB ROM Bank 01..NN (in cartridge, switchable bank number)
@@ -75,9 +68,10 @@ type Mapper struct {
 	ppu *PPU
 
 	watches []uint16
+	buttons *Buttons
 }
 
-func NewMapper() *Mapper {
+func NewMapper(buttons *Buttons) *Mapper {
 	m := &Mapper{
 		rom0:   make([]byte, 0x4000), // 16KB of ROM
 		rom1:   make([]byte, 0x4000), // 16KB of ROM
@@ -89,6 +83,7 @@ func NewMapper() *Mapper {
 		hram:   make([]byte, 0x7F),   // 127 bytes of HRAM
 
 		watches: []uint16{},
+		buttons: buttons,
 	}
 
 	// Fill rom0 with 0xFF, really just to simulate having no cartridge inserted
@@ -144,14 +139,14 @@ func (m *Mapper) Write(addr uint16, data byte) {
 			m.ppu.updateSpriteCache(addr)
 		}
 
+	case addr >= NOT_USABLE && addr < IO:
+		{
+			// Writing to this range is prohibited, but code often tries
+			return
+		}
+
 	case addr >= IO && addr < HRAM:
 		{
-			// HACK: TEMPORARY - Ignore writes to the JOYP register
-			if addr == JOYP {
-				//log.Printf("JOYP write was blocked: %08b", data)
-				return
-			}
-
 			if addr == DIV {
 				// Writing to the DIV register resets the counter
 				m.io[addr-IO] = 0
@@ -161,7 +156,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 			if addr == DMA {
 				m.io[addr-IO] = data
 				for i := 0; i < 0xA0; i++ {
-					// Source address is divided by 0x100 for some reason
+					// For DMA source address is divided by 0x100 for some reason
 					m.Write(OAM+uint16(i), m.Read(uint16(data)*0x100+uint16(i)))
 				}
 				return
@@ -178,12 +173,6 @@ func (m *Mapper) Write(addr uint16, data byte) {
 	case addr == IE:
 		{
 			m.interrupt = data
-		}
-
-	case addr >= 0xFEA0 && addr <= 0xFEFF:
-		{
-			// Writing to this range is prohibited, but we can just ignore it
-			//log.Println("Invalid write to 0xFEA0-0xFEFF")
 		}
 
 	default:
@@ -214,29 +203,46 @@ func (m Mapper) Read(addr uint16) byte {
 		return m.wram[addr-ECHO_RAM]
 	case addr >= OAM && addr < NOT_USABLE:
 		return m.oam[addr-OAM]
+		// Reading from the NOT_USABLE range returns 0xFF
+	case addr >= NOT_USABLE && addr < IO:
+		return 0xFF
 	case addr >= IO && addr < HRAM:
+		// Handle requests for the JOYP register
+		if addr == JOYP {
+			// If bit 4 is NOT set, return the d-pad state
+			if m.io[0]&0x10 == 0 {
+				return m.io[0] | m.buttons.GetPadState()
+			}
+
+			// If bit 5 is ZERO, return the button state
+			if m.io[0]&0x20 == 0 {
+				return m.io[0] | m.buttons.GetButtonState()
+			}
+
+			if addr == STAT {
+				log.Printf("Reading STAT register\n")
+			}
+
+			if addr == LCDC {
+				log.Printf("Reading LCDC register\n")
+			}
+
+			// If neither bit 4 or 5 are set, return 0xFF
+			return m.io[0] | 0x0F
+		}
+
+		// Rest of the IO registers are just read
 		return m.io[addr-IO]
 	case addr >= HRAM && addr < IE:
 		return m.hram[addr-HRAM]
 	case addr == IE:
 		return m.interrupt
-	// Invalid memory read
-	case addr >= 0xFEA0 && addr <= 0xFEFF:
-		{
-			return 0xFF
-		}
+
 	}
 
 	log.Fatalf("Invalid memory read at %04X", addr)
 
 	return 0
-}
-
-func (m *Mapper) requestInterrupt(interruptBit byte) {
-	interruptByte := m.Read(IF)
-	interruptByte |= interruptBit
-	m.Write(IF, interruptByte)
-	//log.Printf("Requesting interrupt: %08b", interruptByte)
 }
 
 func (m *Mapper) bootROMEnabled() bool {

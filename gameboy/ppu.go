@@ -6,6 +6,13 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+// VRAM offests
+const TILE_DATA_0 = 0x8000
+const TILE_DATA_1 = 0x8800
+const TILE_DATA_2 = 0x9000
+const TILE_MAP_0 = 0x9800
+const TILE_MAP_1 = 0x9C00
+
 type PPU struct {
 	mapper *Mapper
 	pallet [4]color.RGBA
@@ -20,6 +27,8 @@ type PPU struct {
 	// Scanline register
 	scanline   byte
 	dotCounter int
+
+	gb *Gameboy
 }
 
 // Abstraction over the OAM data to represent a sprite
@@ -74,8 +83,8 @@ func (ppu *PPU) updateTileCache(addr uint16) {
 		tileData[i] = ppu.mapper.Read(tileDataAddr + i)
 	}
 
-	// Read the pallet lookup from memory
-	palLookupByte := ppu.mapper.Read(0xFF47)
+	// Read the palette data
+	palLookupByte := ppu.mapper.Read(BGP)
 
 	// This converts the 16 bytes of tile data into an 8x8 image
 	// Using 2 bits per pixel to index the pallet
@@ -151,10 +160,6 @@ func (ppu *PPU) render() {
 
 	// Handle OAM and render sprites
 	for _, sprite := range ppu.sprites {
-		if sprite.y == 0 && sprite.x == 0 || sprite.tile == 0 {
-			continue
-		}
-
 		op := &ebiten.DrawImageOptions{}
 		screenY := int(sprite.y) - 16
 		screenX := int(sprite.x) - 8
@@ -166,21 +171,27 @@ func (ppu *PPU) render() {
 func (ppu *PPU) cycle(clockCycles int) {
 	ppu.dotCounter += clockCycles
 
-	// TODO: This is all wrong?
+	// TODO: Still needs work
 	if ppu.dotCounter > 456 {
 		ppu.dotCounter = 0
 
 		ppu.scanline++
 
+		if ppu.scanline == 144 {
+			// Request vblank interrupt
+			ppu.gb.requestInterrupt(INT_VBLANK)
+		}
+
 		if ppu.scanline > 153 {
 			ppu.scanline = 0
 			ppu.render()
-
-			// Request vblank interrupt
-			ppu.mapper.requestInterrupt(INT_VBLANK)
 		}
 
-		ppu.mapper.Write(0xFF44, ppu.scanline)
+		ppu.mapper.Write(LY, ppu.scanline)
+		if ppu.scanline == ppu.mapper.Read(LYC) {
+			// set bit 2 of STAT
+			ppu.mapper.Write(STAT, bitSet(ppu.mapper.Read(STAT), 2))
+		}
 	}
 }
 

@@ -9,8 +9,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-var logging = false
-
 const (
 	INT_VBLANK = 0x01
 	INT_LCD    = 0x02
@@ -20,18 +18,16 @@ const (
 )
 
 type Config struct {
-	Scale       int      `yaml:"scale"`
-	ROM         string   `yaml:"rom"`
-	Logging     bool     `yaml:"logging"`
 	Breakpoints []uint16 `yaml:"breakpoints"`
 	Watches     []uint16 `yaml:"watches"`
 	BootROM     string   `yaml:"bootROM"`
 }
 
 type Gameboy struct {
-	mapper *Mapper
-	ppu    *PPU
-	cpu    *CPU
+	mapper  *Mapper
+	ppu     *PPU
+	cpu     *CPU
+	Buttons *Buttons
 
 	divider int
 
@@ -42,25 +38,30 @@ type Gameboy struct {
 func NewGameboy(config Config) *Gameboy {
 	log.Println("Initializing Gameboy")
 
-	mapper := NewMapper()
+	buttons := &Buttons{}
+	mapper := NewMapper(buttons)
 	cpu := NewCPU(mapper)
-
+	ppu := NewPPU(mapper)
 	gb := Gameboy{
 		mapper:  mapper,
-		ppu:     NewPPU(mapper), // Bidirectional dependency here
+		ppu:     ppu, // Bidirectional dependency here
 		cpu:     cpu,
 		Running: false,
 
-		config: config,
+		config:  config,
+		Buttons: buttons,
 	}
+
+	ppu.gb = &gb
 
 	// Set up the initial state of the Gameboy
 	mapper.io[0x00] = 0xf
 
 	mapper.Write(LCDC, 0x91) // Set the LCDC register
-	mapper.Write(STAT, 0x81) // Set the STAT register
-	mapper.Write(LY, 0x90)   // Set the scanline to 144
-	mapper.Write(BGP, 0xE4)  // Set the background palette
+	// mapper.Write(STAT, 0x81) // Set the STAT register
+	mapper.Write(LY, 0x91)  // Set the scanline to 145
+	mapper.Write(BGP, 0xFC) // Set the background palette
+	mapper.Write(DIV, 0xAB) // Set the divider
 
 	// Optional boot ROM, not needed but included for authenticity
 	if config.BootROM != "" {
@@ -81,11 +82,9 @@ func NewGameboy(config Config) *Gameboy {
 		log.Println("Boot ROM not available, it will be disabled")
 		// DISABLE the boot ROM
 		mapper.Write(BOOT_ROM_DISABLE, 0x01)
-		// PC to 0x100, this is where PC would be after the boot ROM
+		// Jump PC to 0x100, this is where PC would be after the boot ROM
 		cpu.PC = 0x100
 	}
-
-	logging = config.Logging
 
 	if len(config.Breakpoints) > 0 {
 		cpu.breakpoints = config.Breakpoints
@@ -117,6 +116,8 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 
 	cycles := 0
 	for cycles <= cyclesPerFrame {
+		cycles += gb.checkInterrupts()
+
 		// Run the CPU fetch/exec cycle
 		cpuCycles := gb.cpu.ExecuteNext(false)
 		if cpuCycles < 0 {
@@ -126,20 +127,16 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 		}
 
 		cycles += cpuCycles
-		cycles += gb.checkInterrupts()
 
 		// PPU update
 		gb.ppu.cycle(cpuCycles)
 	}
 
-	// TODO: Remove this later I think
-	gb.ppu.render()
-
 	// Timer update DIV
-	// TODO: This is not correct yet!
 	gb.updateTimers(cycles)
 
 	// Read serial input
+	// HACK: Replace with a proper serial port implementation
 	hasData := gb.mapper.Read(SC)
 	if hasData == 0x81 {
 		// Read the data from the serial port
@@ -147,36 +144,53 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 		log.Printf("Serial data read: %c\n", data)
 		gb.mapper.Write(SC, 0x01)
 
-		gb.mapper.requestInterrupt(INT_SERIAL)
+		gb.requestInterrupt(INT_SERIAL)
+	}
+
+	// Interrupt for joypad
+	if gb.Buttons.Changed() {
+		gb.requestInterrupt(INT_JOYPAD)
+		gb.Buttons.ClearChanged()
 	}
 }
 
 func (gb *Gameboy) checkInterrupts() int {
+
+	if gb.cpu.halted && !gb.cpu.IME {
+		return 0
+	}
+
 	// Check for interrupts
+	if gb.mapper.Read(IF)&gb.mapper.Read(IE) != 0 {
+		gb.cpu.halted = false
+	}
+
 	if gb.cpu.IME {
-		interrupts := gb.mapper.Read(IF) & gb.mapper.Read(IE)
-		if interrupts != 0 {
-			if logging {
-				log.Printf("Interrupts: %08b\n", interrupts)
+		interruptMask := gb.mapper.Read(IF) & gb.mapper.Read(IE)
+
+		if interruptMask != 0 {
+			if gb.cpu.halted {
+				log.Printf("Halted, and interrupt %08b requested, pc: 0x%04X", interruptMask, gb.cpu.PC)
+				gb.cpu.halted = false
 			}
 
-			if interrupts&INT_VBLANK != 0 {
+			if interruptMask&INT_VBLANK != 0 {
 				gb.cpu.handleInterrupt(INT_VBLANK)
 				return 20
 			}
-			if interrupts&INT_LCD != 0 {
+			if interruptMask&INT_LCD != 0 {
 				gb.cpu.handleInterrupt(INT_LCD)
 				return 20
 			}
-			if interrupts&INT_TIMER != 0 {
+			if interruptMask&INT_TIMER != 0 {
 				gb.cpu.handleInterrupt(INT_TIMER)
 				return 20
 			}
-			if interrupts&INT_SERIAL != 0 {
+			if interruptMask&INT_SERIAL != 0 {
 				gb.cpu.handleInterrupt(INT_SERIAL)
 				return 20
 			}
-			if interrupts&INT_JOYPAD != 0 {
+			if interruptMask&INT_JOYPAD != 0 {
 				gb.cpu.handleInterrupt(INT_JOYPAD)
 				return 20
 			}
@@ -186,7 +200,14 @@ func (gb *Gameboy) checkInterrupts() int {
 	return 0
 }
 
+func (gb *Gameboy) requestInterrupt(interruptBit byte) {
+	interruptByte := gb.mapper.Read(IF)
+	interruptByte |= interruptBit
+	gb.mapper.Write(IF, interruptByte)
+}
+
 func (gb *Gameboy) updateTimers(cycles int) {
+	// TODO: Not sure this is the correct way to handle the DIV register
 	gb.divider += cycles
 	if gb.divider >= 256 {
 		gb.divider -= 256
@@ -240,28 +261,19 @@ func (gb *Gameboy) GetDebugInfo() string {
 		BoolToInt(cpu.getFlagZ()), BoolToInt(cpu.getFlagN()), BoolToInt(cpu.getFlagH()), BoolToInt(cpu.getFlagC()))
 
 	// Show the next 5 bytes of memory
-	for i := cpu.PC; i < cpu.PC+5; i++ {
+	for i := cpu.PC - 1; i < cpu.PC+5; i++ {
 		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.Read(i))
 	}
 
-	out += fmt.Sprintf("\nLCDC: 0x%02X %08b\n", gb.mapper.Read(0xff40), gb.mapper.Read(0xff40))
-	out += fmt.Sprintf("STAT: 0x%02X\n", gb.mapper.Read(0xff41))
-	out += fmt.Sprintf("  LY: 0x%02X\n\n", gb.mapper.Read(0xff44))
+	out += fmt.Sprintf("\nLCDC: 0x%08b\n", gb.mapper.Read(LCDC))
+	out += fmt.Sprintf("STAT: 0x%08b\n", gb.mapper.Read(STAT))
+	out += fmt.Sprintf("  LY: 0x%02X\n", gb.mapper.Read(LY))
+	out += fmt.Sprintf(" LYC: 0x%02X\n", gb.mapper.Read(LYC))
+	out += fmt.Sprintf(" BGP: 0x%08b\n\n", gb.mapper.Read(BGP))
 
 	for _, addr := range gb.mapper.watches {
 		out += fmt.Sprintf("Watch %04X:%02X\n", addr, gb.mapper.Read(addr))
 	}
 
 	return out
-}
-
-func (gb *Gameboy) DumpVRAM() {
-	file, err := os.Create("vram.dump")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for i := uint16(0x8000); i < 0x9FFF; i++ {
-		file.Write([]byte{gb.mapper.Read(i)})
-	}
 }

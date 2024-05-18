@@ -17,14 +17,14 @@ func (cpu *CPU) fetchPC16() uint16 {
 
 // Used to call a subroutine at the given address
 func (cpu *CPU) callSub(addr uint16) {
-	// log.Printf(">>> Calling %04X from PC:%04X\n", addr, cpu.PC)
+	//log.Printf(">>> Calling %04X from PC:%04X\n", addr, cpu.PC)
 	cpu.pushStack(cpu.PC)
 	cpu.PC = addr
 }
 
 // Pushes a 16-bit value onto the stack, often the PC but can be any value
 func (cpu *CPU) pushStack(addr uint16) {
-	// log.Printf(">>>> Pushing %04X to stack at SP:%04X\n", addr, cpu.SP)
+	//log.Printf(">>>> Pushing %04X to stack at SP:%04X\n", addr, cpu.SP)
 	sp := cpu.SP
 	cpu.mapper.Write(sp-1, byte(uint16(addr&0xFF00)>>8))
 	cpu.mapper.Write(sp-2, byte(addr&0xFF))
@@ -34,7 +34,7 @@ func (cpu *CPU) pushStack(addr uint16) {
 // Returns from a subroutine by popping the address from the stack
 func (cpu *CPU) returnSub() {
 	pc := cpu.popStack()
-	// log.Printf("Returning to %04X from SP:%04X\n", pc, cpu.SP)
+	//log.Printf(">>>> Returning to %04X from SP:%04X\n", pc, cpu.SP)
 	cpu.PC = pc
 }
 
@@ -49,7 +49,6 @@ func (cpu *CPU) popStack() uint16 {
 
 // Performs an OR operation on two bytes and sets the flags accordingly & returns the result
 func (cpu *CPU) byteOR(a, b byte) byte {
-	cpu.logMessage("--- OR: a:%02X, b:%02X", a, b)
 	result := a | b
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(false)
@@ -60,7 +59,6 @@ func (cpu *CPU) byteOR(a, b byte) byte {
 
 // Performs an AND operation on two bytes and sets the flags accordingly & returns the result
 func (cpu *CPU) byteAND(a, b byte) byte {
-	cpu.logMessage("--- AND: a:%02X, b:%02X", a, b)
 	result := a & b
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(false)
@@ -71,7 +69,6 @@ func (cpu *CPU) byteAND(a, b byte) byte {
 
 // Performs an XOR operation on two bytes and sets the flags accordingly & returns the result
 func (cpu *CPU) byteXOR(a, b byte) byte {
-	cpu.logMessage("--- XOR: a:%02X, b:%02X", a, b)
 	result := a ^ b
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(false)
@@ -82,7 +79,6 @@ func (cpu *CPU) byteXOR(a, b byte) byte {
 
 // Performs 8-bit addition between two bytes and sets the flags accordingly
 func (cpu *CPU) byteAdd(a, b byte) byte {
-	cpu.logMessage("--- ADD: a:%02X, b:%02X", a, b)
 	result := a + b
 	carry := (uint16(a) + uint16(b)) > 0xFF
 
@@ -96,7 +92,6 @@ func (cpu *CPU) byteAdd(a, b byte) byte {
 
 // Performs 8-bit addition with carry between two bytes and sets the flags accordingly
 func (cpu *CPU) byteAddCarry(a, b byte) byte {
-	cpu.logMessage("--- ADC: a:%02X, b:%02X", a, b)
 	carry := byte(BoolToInt(cpu.getFlagC()))
 	result := a + b + carry
 
@@ -109,7 +104,6 @@ func (cpu *CPU) byteAddCarry(a, b byte) byte {
 }
 
 func (cpu *CPU) wordAdd(a, b uint16) uint16 {
-	cpu.logMessage("--- WADD: a:%04X, b:%04X", a, b)
 	result := a + b
 	carry := (a + b) > 0xFFFF
 
@@ -122,7 +116,6 @@ func (cpu *CPU) wordAdd(a, b uint16) uint16 {
 
 // Performs 8-bit subtraction between two bytes and sets the flags accordingly
 func (cpu *CPU) byteSub(a, b byte) byte {
-	cpu.logMessage("--- SUB: a:%02X, b:%02X", a, b)
 	result := a - b
 	carry := a < b
 
@@ -134,9 +127,21 @@ func (cpu *CPU) byteSub(a, b byte) byte {
 	return result
 }
 
+// Performs 8-bit subtraction with carry between two bytes and sets the flags accordingly
+func (cpu *CPU) byteSubCarry(a, b byte) byte {
+	carry := byte(BoolToInt(cpu.getFlagC()))
+	result := a - b - carry
+
+	cpu.setFlagZ(result == 0)
+	cpu.setFlagN(true)
+	cpu.setFlagH(a&0xF < b&0xF+carry)
+	cpu.setFlagC(a < b+carry)
+
+	return result
+}
+
 // Performs 8-bit increment on a byte and sets the flags accordingly
 func (cpu *CPU) byteInc(a byte) byte {
-	cpu.logMessage("--- INC: a:%02X", a)
 	result := a + 1
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(false)
@@ -149,7 +154,6 @@ func (cpu *CPU) byteInc(a byte) byte {
 
 // Performs 8-bit decrement on a byte and sets the flags accordingly
 func (cpu *CPU) byteDec(a byte) byte {
-	cpu.logMessage("--- DEC: a:%02X", a)
 	result := a - 1
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(true)
@@ -162,7 +166,6 @@ func (cpu *CPU) byteDec(a byte) byte {
 
 // Performs comparison between two bytes sets the flags accordingly
 func (cpu *CPU) cmp(a, b byte) {
-	cpu.logMessage("--- CMP: a:%02X, b:%02X", a, b)
 	result := a - b
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(true)
@@ -172,14 +175,12 @@ func (cpu *CPU) cmp(a, b byte) {
 
 // Bit test on a register
 func (cpu *CPU) bitTest(reg byte, bit uint) {
-	cpu.logMessage("--- BIT: %d, %02X", bit, reg)
 	cpu.setFlagZ(reg&(1<<bit) == 0)
 	cpu.setFlagN(false)
 	cpu.setFlagH(true)
 }
 
 func (cpu *CPU) rotLeft(val byte) byte {
-	cpu.logMessage("--- RL: %02X", val)
 	newCarry := val >> 7
 	oldCarry := byte(BoolToInt(cpu.getFlagC()))
 	rot := (val<<1)&0xFF | oldCarry
@@ -193,7 +194,6 @@ func (cpu *CPU) rotLeft(val byte) byte {
 }
 
 func (cpu *CPU) shiftLeftArithmetic(val byte) byte {
-	cpu.logMessage("--- SLA: %02X", val)
 	newCarry := val >> 7
 	shifted := val << 1
 
@@ -206,7 +206,6 @@ func (cpu *CPU) shiftLeftArithmetic(val byte) byte {
 }
 
 func (cpu *CPU) rotRight(val byte) byte {
-	cpu.logMessage("--- RR: %02X", val)
 	newCarry := val & 1
 	oldCarry := byte(BoolToInt(cpu.getFlagC()))
 	rot := (val >> 1) | (oldCarry << 7)
@@ -220,7 +219,6 @@ func (cpu *CPU) rotRight(val byte) byte {
 }
 
 func (cpu *CPU) rotRightCarry(val byte) byte {
-	cpu.logMessage("--- RRC: %02X", val)
 	newCarry := val & 1
 	rot := (val >> 1) | (val << 7)
 
@@ -233,7 +231,6 @@ func (cpu *CPU) rotRightCarry(val byte) byte {
 }
 
 func (cpu *CPU) shiftRightArithmetic(val byte) byte {
-	cpu.logMessage("--- SRA: %02X", val)
 	newCarry := val & 1
 	shifted := (val >> 1) | (val & 0x80)
 
@@ -246,7 +243,6 @@ func (cpu *CPU) shiftRightArithmetic(val byte) byte {
 }
 
 func (cpu *CPU) shiftRightLogical(val byte) byte {
-	cpu.logMessage("--- SRL: %02X", val)
 	newCarry := val & 1
 	shifted := val >> 1
 
@@ -259,7 +255,6 @@ func (cpu *CPU) shiftRightLogical(val byte) byte {
 }
 
 func (cpu *CPU) rotLeftCarry(val byte) byte {
-	cpu.logMessage("--- RLC: %02X", val)
 	newCarry := val >> 7
 	rot := (val << 1) | newCarry
 
@@ -273,7 +268,6 @@ func (cpu *CPU) rotLeftCarry(val byte) byte {
 
 // Swaps the nibbles of a byte
 func (cpu *CPU) swapNibbles(val byte) byte {
-	cpu.logMessage("--- SWAP: %02X", val)
 	swapped := val<<4 | val>>4
 
 	cpu.setFlagZ(swapped == 0)

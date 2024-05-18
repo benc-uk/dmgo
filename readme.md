@@ -12,14 +12,13 @@ Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.or
 - PPU: Functional rendering but incomplete (e.g. scanlines)
 - No interrupts other than vblank
 - Timing: CPU and PPU mostly? clock correct
-- No input
 - No sound
 
 ## Todo
 
 - Finish instructions
 - Other interrupts, timer etc
-- Input
+- Refactor input
 - Render correctly
 - Remove dependency on ebiten from Gameboy package, in PPU
 

@@ -1,16 +1,5 @@
-#rom: "roms/games/DrMario.gb"
-#rom: "roms/games/Tetris.gb"
-rom: "roms/games/Alleyway.gb"
-#rom: "roms/games/PipeDream.gb"
+#bootROM: "etc/dmg_boot.bin"
 
-#rom: "roms/test/hello_world.gb"
-#rom: "roms/test/cpu_instrs.gb"
-#rom: "roms/test/individual/11-op a,(hl).gb"
+#breakpoints: [0x0008]
 
-logging: false
-bootROM: "etc/dmg_boot.bin"
-
-breakpoints: []
-watches: [0xfe00, 0xfe01, 0xfe02, 0xffa6]
-
-scale: 4
+watches: []

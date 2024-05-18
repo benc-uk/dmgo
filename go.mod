@@ -1,4 +1,4 @@
-module yarg
+module dmgo
 
 go 1.22.1
 

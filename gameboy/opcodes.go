@@ -33,6 +33,13 @@ var opcodes = [0x100]func(cpu *CPU){
 		cpu.setFlagC(value > 0x7F)
 	},
 
+	// LD (nn), SP
+	0x08: func(cpu *CPU) {
+		addr := cpu.fetchPC16()
+		cpu.mapper.Write(addr, byte(cpu.SP))
+		cpu.mapper.Write(addr+1, byte(cpu.SP>>8))
+	},
+
 	// LD HL, BC
 	0x09: func(cpu *CPU) { cpu.HL = cpu.wordAdd(cpu.HL, cpu.BC) },
 
@@ -50,6 +57,18 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// LD C, n
 	0x0E: func(cpu *CPU) { cpu.setC(cpu.fetchPC()) },
+
+	// RRCA
+	0x0F: func(cpu *CPU) {
+		value := cpu.A()
+		result := byte(value>>1) | byte(value<<7)
+
+		cpu.setA(result)
+		cpu.setFlagZ(false)
+		cpu.setFlagN(false)
+		cpu.setFlagH(false)
+		cpu.setFlagC(value&1 == 1)
+	},
 
 	// LD DE, nn
 	0x11: func(cpu *CPU) { cpu.DE = cpu.fetchPC16() },
@@ -160,6 +179,9 @@ var opcodes = [0x100]func(cpu *CPU){
 			cpu.PC += uint16(int8(e))
 		}
 	},
+
+	// ADD HL, HL
+	0x29: func(cpu *CPU) { cpu.HL = cpu.wordAdd(cpu.HL, cpu.HL) },
 
 	// LD A, (HL+)
 	0x2A: func(cpu *CPU) {
@@ -417,7 +439,10 @@ var opcodes = [0x100]func(cpu *CPU){
 	0x75: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.L()) },
 
 	// HALT
-	0x76: func(cpu *CPU) { cpu.halted = true },
+	0x76: func(cpu *CPU) {
+		cpu.halted = true
+		log.Printf("HALT called at 0x%04X\n", cpu.PC-1)
+	},
 
 	// LD (HL), A
 	0x77: func(cpu *CPU) { cpu.mapper.Write(cpu.HL, cpu.A()) },
@@ -490,6 +515,51 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// SUB A, B
 	0x90: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.B())) },
+
+	// SUB A, C
+	0x91: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.C())) },
+
+	// SUB A, D
+	0x92: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.D())) },
+
+	// SUB A, E
+	0x93: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.E())) },
+
+	// SUB A, H
+	0x94: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.H())) },
+
+	// SUB A, L
+	0x95: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.L())) },
+
+	// SUB A, (HL)
+	0x96: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.mapper.Read(cpu.HL))) },
+
+	// SUB A, A
+	0x97: func(cpu *CPU) { cpu.setA(cpu.byteSub(cpu.A(), cpu.A())) },
+
+	// SBC A, B
+	0x98: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.B())) },
+
+	// SBC A, C
+	0x99: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.C())) },
+
+	// SBC A, D
+	0x9A: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.D())) },
+
+	// SBC A, E
+	0x9B: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.E())) },
+
+	// SBC A, H
+	0x9C: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.H())) },
+
+	// SBC A, L
+	0x9D: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.L())) },
+
+	// SBC A, (HL)
+	0x9E: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.mapper.Read(cpu.HL))) },
+
+	// SBC A, A
+	0x9F: func(cpu *CPU) { cpu.setA(cpu.byteSubCarry(cpu.A(), cpu.A())) },
 
 	// AND B
 	0xA0: func(cpu *CPU) { cpu.setA(cpu.byteAND(cpu.A(), cpu.B())) },
@@ -598,8 +668,9 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// JP NZ, nn
 	0xC2: func(cpu *CPU) {
+		nn := cpu.fetchPC16()
 		if !cpu.getFlagZ() {
-			cpu.PC = cpu.fetchPC16()
+			cpu.PC = nn
 		}
 	},
 
@@ -650,8 +721,22 @@ var opcodes = [0x100]func(cpu *CPU){
 		cbOpcodes[opcode](cpu)
 	},
 
+	// CALL Z, nn
+	0xCC: func(cpu *CPU) {
+		nn := cpu.fetchPC16()
+		if cpu.getFlagZ() {
+			cpu.callSub(nn)
+		}
+	},
+
 	// CALL nn
 	0xCD: func(cpu *CPU) { cpu.callSub(cpu.fetchPC16()) },
+
+	// ADD A, n
+	0xCE: func(cpu *CPU) { cpu.setA(cpu.byteAdd(cpu.A(), cpu.fetchPC())) },
+
+	// RST 0x8
+	0xCF: func(cpu *CPU) { cpu.callSub(0x0008) },
 
 	// RET NC
 	0xD0: func(cpu *CPU) {
@@ -708,6 +793,16 @@ var opcodes = [0x100]func(cpu *CPU){
 		}
 	},
 
+	// SBC A, n
+	0xDE: func(cpu *CPU) {
+		result := cpu.byteSubCarry(cpu.A(), cpu.fetchPC())
+		cpu.setA(result)
+		cpu.setFlagC(result > cpu.A())
+	},
+
+	// RST 0x18
+	0xDF: func(cpu *CPU) { cpu.callSub(0x0018) },
+
 	// LDH (n), A
 	0xE0: func(cpu *CPU) {
 		cpu.mapper.Write(0xFF00+uint16(cpu.fetchPC()), cpu.A())
@@ -753,6 +848,9 @@ var opcodes = [0x100]func(cpu *CPU){
 
 	// OR A, n
 	0xF6: func(cpu *CPU) { cpu.setA(cpu.byteOR(cpu.A(), cpu.fetchPC())) },
+
+	// LD SP, HL
+	0xF9: func(cpu *CPU) { cpu.SP = cpu.HL },
 
 	// LD A, (nn)
 	0xFA: func(cpu *CPU) { cpu.setA(cpu.mapper.Read(cpu.fetchPC16())) },

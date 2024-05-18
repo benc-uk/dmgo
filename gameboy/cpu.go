@@ -18,8 +18,8 @@ type CPU struct {
 	mapper *Mapper
 
 	// Special internal flags
-	IME    bool
-	halted bool
+	IME    bool // Interrupt Master Enable
+	halted bool // Halt state
 
 	// Debugging
 	opDebug     string
@@ -59,8 +59,6 @@ func (cpu *CPU) ExecuteNext(skipBreak bool) (cyclesSpent int) {
 	// Fetch the next instruction, this will also increment the PC
 	opcode := cpu.fetchPC()
 
-	cpu.logMessage("%04X:%02X %s", currentPC, opcode, opcodeNames[opcode])
-
 	// Check if we have hit a breakpoint
 	for _, bp := range cpu.breakpoints {
 		if bp == currentPC && !skipBreak {
@@ -72,7 +70,7 @@ func (cpu *CPU) ExecuteNext(skipBreak bool) (cyclesSpent int) {
 
 	// Check if the opcode is valid
 	if opcodes[opcode] == nil {
-		log.Printf(" !!! Unknown opcode: 0x%02X\n", opcode)
+		log.Printf(" !!! Unknown opcode: 0x%02X at 0x%02X\n", opcode, currentPC)
 		cpu.PC = currentPC
 		return -1
 	}
@@ -85,6 +83,8 @@ func (cpu *CPU) ExecuteNext(skipBreak bool) (cyclesSpent int) {
 }
 
 func (cpu *CPU) handleInterrupt(interrupt byte) {
+	//log.Printf("Handling interrupt %08b\n", interrupt)
+
 	// Disable interrupts
 	cpu.IME = false
 
@@ -97,18 +97,17 @@ func (cpu *CPU) handleInterrupt(interrupt byte) {
 	// Jump to the interrupt handler
 	switch interrupt {
 	case 0x01:
-		//log.Println(" !!! VBlank interrupt not implemented")
-		cpu.PC = 0x0040
+		cpu.PC = 0x0040 // VBLANK interrupt handler address
 	case 0x02:
-		cpu.PC = 0x0048
+		cpu.PC = 0x0048 // LCD interrupt handler address
 	case 0x04:
-		cpu.PC = 0x0050
+		cpu.PC = 0x0050 // Timer interrupt handler address
 	case 0x08:
-		cpu.PC = 0x0058
+		cpu.PC = 0x0058 // Serial interrupt handler address
 	case 0x10:
-		//log.Println(" !!! Joypad interrupt not implemented")
-		cpu.PC = 0x0060
+		cpu.PC = 0x0060 // Joypad interrupt handler address
 	}
+
 }
 
 // =======================================
@@ -189,14 +188,3 @@ func (cpu *CPU) E() byte { return getLowByte(cpu.DE) }
 func (cpu *CPU) H() byte { return getHighByte(cpu.HL) }
 
 func (cpu *CPU) L() byte { return getLowByte(cpu.HL) }
-
-// =======================================
-// Helpers
-// =======================================
-
-// Logs a message if logging is enabled
-func (cpu *CPU) logMessage(s string, a ...any) {
-	if logging {
-		log.Printf(s, a...)
-	}
-}
