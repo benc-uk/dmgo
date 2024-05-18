@@ -126,7 +126,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Render emulator screen
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(float64(scale), float64(scale))
-	op.Filter = ebiten.FilterLinear
+	op.Filter = ebiten.FilterNearest
 	screen.DrawImage(gb.GetScreen(), op)
 
 	// Debug info

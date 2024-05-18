@@ -3,3 +3,5 @@
 #breakpoints: [0x0008]
 
 watches: []
+
+opcodeDebug: [0x18]

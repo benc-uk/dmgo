@@ -18,9 +18,10 @@ const (
 )
 
 type Config struct {
+	BootROM     string   `yaml:"bootROM"`
 	Breakpoints []uint16 `yaml:"breakpoints"`
 	Watches     []uint16 `yaml:"watches"`
-	BootROM     string   `yaml:"bootROM"`
+	OpcodeDebug []byte   `yaml:"opcodeDebug"`
 }
 
 type Gameboy struct {
@@ -52,16 +53,14 @@ func NewGameboy(config Config) *Gameboy {
 		Buttons: buttons,
 	}
 
-	ppu.gb = &gb
+	ppu.gb = &gb // Another ugly dependency
 
 	// Set up the initial state of the Gameboy
-	mapper.io[0x00] = 0xf
-
 	mapper.Write(LCDC, 0x91) // Set the LCDC register
-	// mapper.Write(STAT, 0x81) // Set the STAT register
-	mapper.Write(LY, 0x91)  // Set the scanline to 145
-	mapper.Write(BGP, 0xFC) // Set the background palette
-	mapper.Write(DIV, 0xAB) // Set the divider
+	mapper.Write(STAT, 0x81) // Set the STAT register
+	mapper.Write(LY, 0x91)   // Set the scanline to 145
+	mapper.Write(BGP, 0xFC)  // Set the background palette
+	mapper.Write(DIV, 0xAB)  // Set the divider
 
 	// Optional boot ROM, not needed but included for authenticity
 	if config.BootROM != "" {
@@ -83,7 +82,7 @@ func NewGameboy(config Config) *Gameboy {
 		// DISABLE the boot ROM
 		mapper.Write(BOOT_ROM_DISABLE, 0x01)
 		// Jump PC to 0x100, this is where PC would be after the boot ROM
-		cpu.PC = 0x100
+		cpu.pc = 0x100
 	}
 
 	if len(config.Breakpoints) > 0 {
@@ -92,6 +91,10 @@ func NewGameboy(config Config) *Gameboy {
 
 	if len(config.Watches) > 0 {
 		mapper.watches = config.Watches
+	}
+
+	if len(config.OpcodeDebug) > 0 {
+		cpu.opDebug = config.OpcodeDebug
 	}
 
 	return &gb
@@ -156,7 +159,7 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 
 func (gb *Gameboy) checkInterrupts() int {
 
-	if gb.cpu.halted && !gb.cpu.IME {
+	if gb.cpu.halted && !gb.cpu.ime {
 		return 0
 	}
 
@@ -165,12 +168,12 @@ func (gb *Gameboy) checkInterrupts() int {
 		gb.cpu.halted = false
 	}
 
-	if gb.cpu.IME {
+	if gb.cpu.ime {
 		interruptMask := gb.mapper.Read(IF) & gb.mapper.Read(IE)
 
 		if interruptMask != 0 {
 			if gb.cpu.halted {
-				log.Printf("Halted, and interrupt %08b requested, pc: 0x%04X", interruptMask, gb.cpu.PC)
+				log.Printf("Halted, and interrupt %08b requested, pc: 0x%04X", interruptMask, gb.cpu.pc)
 				gb.cpu.halted = false
 			}
 
@@ -250,18 +253,18 @@ func (gb *Gameboy) GetDebugInfo() string {
 	cpu := gb.cpu
 
 	out := ""
-	out += fmt.Sprintf("PC: 0x%04X -> %s\n\n", gb.cpu.PC, opcodeNames[gb.mapper.Read(cpu.PC)])
+	out += fmt.Sprintf("PC: 0x%04X -> %s\n\n", gb.cpu.pc, opcodeNames[gb.mapper.Read(cpu.pc)])
 	out += fmt.Sprintf("A:%02X B:%02X C:%02X D:%02X E:%02X H:%02X L:%02X\n",
 		cpu.A(), cpu.B(), cpu.C(), cpu.D(), cpu.E(), cpu.H(), cpu.L())
-	out += fmt.Sprintf("AF:%04X BC:%04X DE:%04X HL:%04X SP:%04X\n", cpu.AF, cpu.BC, cpu.DE, cpu.HL, cpu.SP)
-	out += fmt.Sprintf("IE:%08b IF:%08b IME:%d\n", gb.mapper.Read(IE), gb.mapper.Read(IF), BoolToInt(cpu.IME))
+	out += fmt.Sprintf("AF:%04X BC:%04X DE:%04X HL:%04X SP:%04X\n", cpu.af, cpu.bc, cpu.de, cpu.hl, cpu.sp)
+	out += fmt.Sprintf("IE:%08b IF:%08b IME:%d\n", gb.mapper.Read(IE), gb.mapper.Read(IF), BoolToInt(cpu.ime))
 
 	// Flags
 	out += fmt.Sprintf("Z:%d N:%d H:%d C:%d\n\n",
 		BoolToInt(cpu.getFlagZ()), BoolToInt(cpu.getFlagN()), BoolToInt(cpu.getFlagH()), BoolToInt(cpu.getFlagC()))
 
 	// Show the next 5 bytes of memory
-	for i := cpu.PC - 1; i < cpu.PC+5; i++ {
+	for i := cpu.pc - 1; i < cpu.pc+5; i++ {
 		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.Read(i))
 	}
 

@@ -160,11 +160,18 @@ func (ppu *PPU) render() {
 
 	// Handle OAM and render sprites
 	for _, sprite := range ppu.sprites {
+		spriteTileNum := int(sprite.tile)
+
+		if tileOffset > 0 {
+			// Tile number is signed 8bit when LCDC bit 4 is NOT set
+			spriteTileNum = int(int8(sprite.tile))
+		}
+
 		op := &ebiten.DrawImageOptions{}
 		screenY := int(sprite.y) - 16
 		screenX := int(sprite.x) - 8
 		op.GeoM.Translate(float64(screenX), float64(screenY))
-		ppu.screen.DrawImage(ppu.tiles[tileOffset+int(sprite.tile)], op)
+		ppu.screen.DrawImage(ppu.tiles[tileOffset+spriteTileNum], op)
 	}
 }
 
