@@ -65,8 +65,6 @@ type Mapper struct {
 
 	bootROM []byte
 
-	ppu *PPU
-
 	watches []uint16
 	buttons *Buttons
 }
@@ -112,9 +110,9 @@ func (m *Mapper) Write(addr uint16, data byte) {
 			m.vram[addr-VRAM] = data
 
 			// Check for writes to the tile data
-			if addr >= TILE_DATA_0 && addr < TILE_MAP_0 {
-				m.ppu.updateTileCache(addr)
-			}
+			// if addr >= TILE_DATA_0 && addr < TILE_MAP_0 {
+			// 	m.ppu.updateTileCache(addr)
+			// }
 		}
 
 	case addr >= EXT_RAM && addr < WRAM:
@@ -136,7 +134,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 	case addr >= OAM && addr < NOT_USABLE:
 		{
 			m.oam[addr-OAM] = data
-			m.ppu.updateSpriteCache(addr)
+			//m.ppu.updateSpriteCache(addr)
 		}
 
 	case addr >= NOT_USABLE && addr < IO:

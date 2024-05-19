@@ -23,10 +23,6 @@ func getLowByte(reg uint16) byte {
 	return byte(reg & 0xff)
 }
 
-func swapNibbles(b byte) byte {
-	return b<<4 | b>>4
-}
-
 // Set given bit in the byte to 0
 func bitReset(b byte, bit uint) byte {
 	return b &^ (1 << bit)
@@ -35,4 +31,9 @@ func bitReset(b byte, bit uint) byte {
 // Set given bit in the byte to 1
 func bitSet(b byte, bit uint) byte {
 	return b | (1 << bit)
+}
+
+func twoBitValue(b byte, bit uint) int {
+	// get two bits at position bit and bit+1 and return them as a int from 0 to 3
+	return int((b >> bit) & 0x3)
 }

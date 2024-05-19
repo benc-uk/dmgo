@@ -10,19 +10,14 @@ import (
 const TILE_DATA_0 = 0x8000
 const TILE_DATA_1 = 0x8800
 const TILE_DATA_2 = 0x9000
-const TILE_MAP_0 = 0x9800
-const TILE_MAP_1 = 0x9C00
+const TILE_MAP_0 = uint16(0x9800)
+const TILE_MAP_1 = uint16(0x9C00)
 
 type PPU struct {
-	mapper *Mapper
-	pallet [4]color.RGBA
-	screen *ebiten.Image
-
-	// Cache of all the 8x8 tiles, updated when the VRAM is written to
-	tiles [128 * 3]*ebiten.Image
-
-	// Cache of all the sprites, updated when the OAM is written to
-	sprites [40]Sprite
+	mapper     *Mapper
+	emuPalette [4]color.RGBA
+	screen     *ebiten.Image
+	tileCache  map[uint16]*ebiten.Image
 
 	// Scanline register
 	scanline   byte
@@ -44,72 +39,24 @@ type Sprite struct {
 func NewPPU(mapper *Mapper) *PPU {
 	// Hard coded palette for now
 	pallet := [4]color.RGBA{
-		{0xFF, 0xFF, 0xFF, 0xFF}, // 0 is white
-		{0x55, 0x55, 0x55, 0xFF}, // 1 is dark grey
-		{0xAA, 0xAA, 0xAA, 0xFF}, // 2 is light grey
-		{0x00, 0x00, 0x00, 0xFF}, // 3 is black
+		color.RGBA{0xe0, 0xf8, 0xd0, 255},
+		color.RGBA{0x88, 0xc0, 0x70, 255},
+		color.RGBA{0x34, 0x68, 0x56, 255},
+		color.RGBA{0x08, 0x18, 0x20, 255},
 	}
 
 	ppu := &PPU{
-		pallet: pallet,
-		mapper: mapper,
+		emuPalette: pallet,
+		mapper:     mapper,
 
 		// Internal screen buffer
 		screen: ebiten.NewImage(160, 144),
 	}
 
-	// Horrible! Bidirectional dependency mess
-	mapper.ppu = ppu
-
-	// Empty tile cache
-	for i := 0; i < 384; i++ {
-		ppu.tiles[i] = ebiten.NewImage(8, 8)
-	}
-
-	// Empty sprite cache
-	for i := 0; i < 40; i++ {
-		ppu.sprites[i] = Sprite{}
-	}
-
 	return ppu
 }
 
-// Tile cache maps the tile data 8000-97FF to a cache of 384 8x8 images
-func (ppu *PPU) updateTileCache(addr uint16) {
-	tileNum := (addr - TILE_DATA_0) / 16
-	tileDataAddr := TILE_DATA_0 + tileNum*16
-	tileData := [16]byte{}
-	for i := uint16(0); i < 16; i++ {
-		tileData[i] = ppu.mapper.Read(tileDataAddr + i)
-	}
-
-	// Read the palette data
-	palLookupByte := ppu.mapper.Read(BGP)
-
-	// This converts the 16 bytes of tile data into an 8x8 image
-	// Using 2 bits per pixel to index the pallet
-	img := ebiten.NewImage(8, 8)
-	for tileByte := 0; tileByte < 16; tileByte += 2 {
-		for bit := 0; bit < 8; bit++ {
-			pIndex := ((tileData[tileByte] >> (7 - bit) & 1) << 1) | (tileData[tileByte+1] >> (7 - bit) & 1)
-			if pIndex == 0 {
-				pIndex = palLookupByte & 0x3
-			} else if pIndex == 1 {
-				pIndex = (palLookupByte >> 2) & 0x3
-			} else if pIndex == 2 {
-				pIndex = (palLookupByte >> 4) & 0x3
-			} else {
-				pIndex = (palLookupByte >> 6) & 0x3
-			}
-			colour := ppu.pallet[pIndex]
-			img.Set(bit, tileByte/2, colour)
-		}
-	}
-
-	ppu.tiles[tileNum] = img
-}
-
-func (ppu *PPU) updateSpriteCache(addr uint16) {
+func (ppu *PPU) newSprite(addr uint16) Sprite {
 	i := (addr - OAM) / 4
 
 	sprite := Sprite{
@@ -121,57 +68,102 @@ func (ppu *PPU) updateSpriteCache(addr uint16) {
 		flipX:    ppu.mapper.oam[i*4+3]&0x20 == 0x20,
 	}
 
-	ppu.sprites[i] = sprite
+	return sprite
+}
+
+// This function creates a new 8x8 image for a tile reading 16 bytes from the VRAM
+// and using the BGP register to lookup the palette
+func (ppu *PPU) getTileImage(addr uint16) *ebiten.Image {
+	// Check if the tile is already in the cache
+	if _, ok := ppu.tileCache[addr]; ok {
+		return ppu.tileCache[addr]
+	}
+
+	img := ebiten.NewImage(8, 8)
+
+	// Read the Gameboy palette state, this can be changed by the game
+	palLookupByte := ppu.mapper.Read(BGP)
+
+	for tileByteIndex := uint16(0); tileByteIndex < 16; tileByteIndex += 2 {
+		byte1 := ppu.mapper.Read(addr + tileByteIndex)
+		byte2 := ppu.mapper.Read(addr + tileByteIndex + 1)
+		for bit := 0; bit < 8; bit++ {
+			// Combine the bits to get the color index
+			colorId := (byte1 >> (7 - bit) & 1) | ((byte2 >> (7 - bit) & 1) << 1)
+
+			// Use the palette BGP, which is byte with 2bit colorId -> Value mapping
+			// https://gbdev.io/pandocs/Palettes.html
+			color := palLookupByte >> (colorId * 2) & 0x3
+
+			// Set the final color in the image
+			img.Set(bit, int(tileByteIndex/2), ppu.emuPalette[color])
+		}
+	}
+
+	// Cache the tile
+	ppu.tileCache[addr] = img
+	return img
+}
+
+func (ppu *PPU) getTileAddr(tileNum byte) uint16 {
+	// Addressing mode 8000
+	if ppu.GetLCDCBit(4) == 1 {
+		return uint16(TILE_DATA_0 + uint16(tileNum)*16)
+	}
+
+	// Tile number is a *signed* 8bit when in 8800 address mode
+	return uint16(int(TILE_DATA_2) + int(int8(tileNum))*16)
 }
 
 func (ppu *PPU) render() {
-	// Tile map is 9800-9BFF when LCDC bit 6 is NOT set
-	tileMap := uint16(TILE_MAP_0)
+	mapBase := TILE_MAP_0
 	if ppu.GetLCDCBit(3) == 1 {
-		// And 9C00-9FFF when it is set
-		tileMap = uint16(TILE_MAP_1)
+		mapBase = TILE_MAP_1
 	}
 
-	// Tile offset is 0x8800 when LCDC bit 4 is NOT set
-	tileOffset := 256
-	if ppu.GetLCDCBit(4) == 1 {
-		// And 0x8000 when it is set
-		tileOffset = 0
-	}
+	// Reset cache on each render, coz palette can change
+	ppu.tileCache = make(map[uint16]*ebiten.Image)
 
 	// get SCROLL_Y and SCROLL_X
 	scrollY := float64(ppu.mapper.Read(SCY))
+	scrollX := float64(ppu.mapper.Read(SCX))
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position
 	for i := uint16(0); i < 1024; i++ {
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(float64((i%32)*8), float64((i/32)*8)-scrollY)
+		op.GeoM.Translate(float64((i%32)*8)+scrollX, float64((i/32)*8)-scrollY)
 
-		tilenum := int(ppu.mapper.Read(tileMap + i))
-
-		if tileOffset > 0 {
-			// Tile number is signed 8bit when LCDC bit 4 is NOT set
-			tilenum = int(int8(tilenum))
-		}
-
-		ppu.screen.DrawImage(ppu.tiles[tileOffset+tilenum], op)
+		tilenum := int(ppu.mapper.Read(mapBase + i))
+		tileAddr := ppu.getTileAddr(byte(tilenum))
+		ppu.screen.DrawImage(ppu.getTileImage(tileAddr), op)
 	}
 
-	// Handle OAM and render sprites
-	for _, sprite := range ppu.sprites {
-		spriteTileNum := int(sprite.tile)
-
-		if tileOffset > 0 {
-			// Tile number is signed 8bit when LCDC bit 4 is NOT set
-			spriteTileNum = int(int8(sprite.tile))
-		}
+	// Handle OAM and render 40 sprites
+	for i := 0; i < 40; i++ {
+		addr := OAM + uint16(i*4)
+		sprite := ppu.newSprite(addr)
 
 		op := &ebiten.DrawImageOptions{}
 		screenY := int(sprite.y) - 16
 		screenX := int(sprite.x) - 8
 		op.GeoM.Translate(float64(screenX), float64(screenY))
-		ppu.screen.DrawImage(ppu.tiles[tileOffset+spriteTileNum], op)
+
+		// Tile addressing is more simple for sprites
+		tileAddr := TILE_DATA_0 + uint16(sprite.tile)*16
+
+		// Flip the sprite if needed
+		if sprite.flipX {
+			op.GeoM.Scale(-1, 1)
+			op.GeoM.Translate(8, 0)
+		}
+
+		if sprite.flipY {
+			op.GeoM.Scale(1, -1)
+			op.GeoM.Translate(0, 8)
+		}
+
+		ppu.screen.DrawImage(ppu.getTileImage(tileAddr), op)
 	}
 }
 

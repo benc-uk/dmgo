@@ -10,16 +10,22 @@ Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.or
 - About 60% of the CPU opcodes
 - 100% of the CB prefix opcodes
 - PPU: Functional rendering but incomplete (e.g. scanlines)
-- No interrupts other than vblank
+- Some interrupts, e.g. vblank
 - Timing: CPU and PPU mostly? clock correct
 - No sound
 
 ## Todo
 
-- Finish instructions
+- Finish instructions!
 - Other interrupts, timer etc
-- Refactor input
-- Render correctly
+- Correct STAT register
+- Is HALT working?
+- Render correctly per scanline
+  - Remove sprite/tile cache
+
+Longer term
+
+- Support MBC1
 - Remove dependency on ebiten from Gameboy package, in PPU
 
 ## Reference Collection

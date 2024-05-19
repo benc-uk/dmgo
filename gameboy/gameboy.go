@@ -45,7 +45,7 @@ func NewGameboy(config Config) *Gameboy {
 	ppu := NewPPU(mapper)
 	gb := Gameboy{
 		mapper:  mapper,
-		ppu:     ppu, // Bidirectional dependency here
+		ppu:     ppu,
 		cpu:     cpu,
 		Running: false,
 
@@ -53,7 +53,7 @@ func NewGameboy(config Config) *Gameboy {
 		Buttons: buttons,
 	}
 
-	ppu.gb = &gb // Another ugly dependency
+	ppu.gb = &gb // Ugly cross dependency, so PPU can request interrupts
 
 	// Set up the initial state of the Gameboy
 	mapper.Write(LCDC, 0x91) // Set the LCDC register
