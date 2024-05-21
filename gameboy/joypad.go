@@ -44,22 +44,11 @@ func (b *Buttons) ClearChanged() {
 	b.changed = false
 }
 
-func (b *Buttons) Reset() {
-	b.butA = false
-	b.butB = false
-	b.sel = false
-	b.start = false
-	b.right = false
-	b.left = false
-	b.up = false
-	b.down = false
-}
-
 // NOTE! The buttons are active low!
 // Note: 0 = pressed, 1 = not pressed 🙃
 // https://gbdev.io/pandocs/Joypad_Input.html
 
-func (b *Buttons) GetPadState() byte {
+func (b *Buttons) getPadState() byte {
 	state := byte(0x0F)
 
 	if b.down {
@@ -78,7 +67,7 @@ func (b *Buttons) GetPadState() byte {
 	return state
 }
 
-func (b *Buttons) GetButtonState() byte {
+func (b *Buttons) getButtonState() byte {
 	state := byte(0x0F)
 
 	if b.start {

@@ -37,7 +37,7 @@ func init() {
 
 	// 0x46 ~ 0x76
 	for i := 0; i <= 3; i++ {
-		cbOpcodes[0x46+0x10*i] = func(cpu *CPU) { cpu.bitTest(cpu.mapper.Read(cpu.hl), uint(i*2)) }
+		cbOpcodes[0x46+0x10*i] = func(cpu *CPU) { cpu.bitTest(cpu.mapper.read(cpu.hl), uint(i*2)) }
 	}
 
 	// 0x47 ~ 0x77
@@ -77,7 +77,7 @@ func init() {
 
 	// 0x4E ~ 0x7E
 	for i := 0; i <= 3; i++ {
-		cbOpcodes[0x4E+0x10*i] = func(cpu *CPU) { cpu.bitTest(cpu.mapper.Read(cpu.hl), uint(i*2)+1) }
+		cbOpcodes[0x4E+0x10*i] = func(cpu *CPU) { cpu.bitTest(cpu.mapper.read(cpu.hl), uint(i*2)+1) }
 	}
 
 	// 0x4F ~ 0x7F
@@ -119,7 +119,7 @@ func init() {
 
 	// 0x86 ~ 0xB6
 	for i := 0; i <= 3; i++ {
-		cbOpcodes[0x86+0x10*i] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, bitReset(cpu.mapper.Read(cpu.hl), uint(i*2))) }
+		cbOpcodes[0x86+0x10*i] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, bitReset(cpu.mapper.read(cpu.hl), uint(i*2))) }
 	}
 
 	// 0x87 ~ 0xB7
@@ -159,7 +159,7 @@ func init() {
 
 	// 0x8E ~ 0xBE
 	for i := 0; i <= 3; i++ {
-		cbOpcodes[0x8E+0x10*i] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, bitReset(cpu.mapper.Read(cpu.hl), uint(i*2)+1)) }
+		cbOpcodes[0x8E+0x10*i] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, bitReset(cpu.mapper.read(cpu.hl), uint(i*2)+1)) }
 	}
 
 	// 0x8F ~ 0xBF
@@ -201,7 +201,7 @@ func init() {
 
 	// 0xC6 ~ 0xF6
 	for i := 0; i <= 3; i++ {
-		cbOpcodes[0xC6+0x10*i] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, bitSet(cpu.mapper.Read(cpu.hl), uint(i*2))) }
+		cbOpcodes[0xC6+0x10*i] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, bitSet(cpu.mapper.read(cpu.hl), uint(i*2))) }
 	}
 
 	// 0xC7 ~ 0xF7
@@ -241,7 +241,7 @@ func init() {
 
 	// 0xCE ~ 0xFE
 	for i := 0; i <= 3; i++ {
-		cbOpcodes[0xCE+0x10*i] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, bitSet(cpu.mapper.Read(cpu.hl), uint(i*2)+1)) }
+		cbOpcodes[0xCE+0x10*i] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, bitSet(cpu.mapper.read(cpu.hl), uint(i*2)+1)) }
 	}
 
 	// 0xCF ~ 0xFF
@@ -258,7 +258,7 @@ func init() {
 	cbOpcodes[0x03] = func(cpu *CPU) { cpu.setE(cpu.rotLeftCarry(cpu.E())) }
 	cbOpcodes[0x04] = func(cpu *CPU) { cpu.setH(cpu.rotLeftCarry(cpu.H())) }
 	cbOpcodes[0x05] = func(cpu *CPU) { cpu.setL(cpu.rotLeftCarry(cpu.L())) }
-	cbOpcodes[0x06] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.rotLeftCarry(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x06] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.rotLeftCarry(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x07] = func(cpu *CPU) { cpu.setA(cpu.rotLeftCarry(cpu.A())) }
 	cbOpcodes[0x08] = func(cpu *CPU) { cpu.setB(cpu.rotRightCarry(cpu.B())) }
 	cbOpcodes[0x09] = func(cpu *CPU) { cpu.setC(cpu.rotRightCarry(cpu.C())) }
@@ -266,7 +266,7 @@ func init() {
 	cbOpcodes[0x0B] = func(cpu *CPU) { cpu.setE(cpu.rotRightCarry(cpu.E())) }
 	cbOpcodes[0x0C] = func(cpu *CPU) { cpu.setH(cpu.rotRightCarry(cpu.H())) }
 	cbOpcodes[0x0D] = func(cpu *CPU) { cpu.setL(cpu.rotRightCarry(cpu.L())) }
-	cbOpcodes[0x0E] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.rotRightCarry(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x0E] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.rotRightCarry(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x0F] = func(cpu *CPU) { cpu.setA(cpu.rotRightCarry(cpu.A())) }
 
 	// 0x10
@@ -276,7 +276,7 @@ func init() {
 	cbOpcodes[0x13] = func(cpu *CPU) { cpu.setE(cpu.rotLeft(cpu.E())) }
 	cbOpcodes[0x14] = func(cpu *CPU) { cpu.setH(cpu.rotLeft(cpu.H())) }
 	cbOpcodes[0x15] = func(cpu *CPU) { cpu.setL(cpu.rotLeft(cpu.L())) }
-	cbOpcodes[0x16] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.rotLeft(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x16] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.rotLeft(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x17] = func(cpu *CPU) { cpu.setA(cpu.rotLeft(cpu.A())) }
 	cbOpcodes[0x18] = func(cpu *CPU) { cpu.setB(cpu.rotRight(cpu.B())) }
 	cbOpcodes[0x19] = func(cpu *CPU) { cpu.setC(cpu.rotRight(cpu.C())) }
@@ -284,7 +284,7 @@ func init() {
 	cbOpcodes[0x1B] = func(cpu *CPU) { cpu.setE(cpu.rotRight(cpu.E())) }
 	cbOpcodes[0x1C] = func(cpu *CPU) { cpu.setH(cpu.rotRight(cpu.H())) }
 	cbOpcodes[0x1D] = func(cpu *CPU) { cpu.setL(cpu.rotRight(cpu.L())) }
-	cbOpcodes[0x1E] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.rotRight(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x1E] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.rotRight(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x1F] = func(cpu *CPU) { cpu.setA(cpu.rotRight(cpu.A())) }
 
 	// 0x20
@@ -294,7 +294,7 @@ func init() {
 	cbOpcodes[0x23] = func(cpu *CPU) { cpu.setE(cpu.shiftLeftArithmetic(cpu.E())) }
 	cbOpcodes[0x24] = func(cpu *CPU) { cpu.setH(cpu.shiftLeftArithmetic(cpu.H())) }
 	cbOpcodes[0x25] = func(cpu *CPU) { cpu.setL(cpu.shiftLeftArithmetic(cpu.L())) }
-	cbOpcodes[0x26] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.shiftLeftArithmetic(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x26] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.shiftLeftArithmetic(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x27] = func(cpu *CPU) { cpu.setA(cpu.shiftLeftArithmetic(cpu.A())) }
 	cbOpcodes[0x28] = func(cpu *CPU) { cpu.setB(cpu.shiftRightArithmetic(cpu.B())) }
 	cbOpcodes[0x29] = func(cpu *CPU) { cpu.setC(cpu.shiftRightArithmetic(cpu.C())) }
@@ -302,7 +302,7 @@ func init() {
 	cbOpcodes[0x2B] = func(cpu *CPU) { cpu.setE(cpu.shiftRightArithmetic(cpu.E())) }
 	cbOpcodes[0x2C] = func(cpu *CPU) { cpu.setH(cpu.shiftRightArithmetic(cpu.H())) }
 	cbOpcodes[0x2D] = func(cpu *CPU) { cpu.setL(cpu.shiftRightArithmetic(cpu.L())) }
-	cbOpcodes[0x2E] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.shiftRightArithmetic(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x2E] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.shiftRightArithmetic(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x2F] = func(cpu *CPU) { cpu.setA(cpu.shiftRightArithmetic(cpu.A())) }
 
 	// 0x30
@@ -312,7 +312,7 @@ func init() {
 	cbOpcodes[0x33] = func(cpu *CPU) { cpu.setE(cpu.swapNibbles(cpu.E())) }
 	cbOpcodes[0x34] = func(cpu *CPU) { cpu.setH(cpu.swapNibbles(cpu.H())) }
 	cbOpcodes[0x35] = func(cpu *CPU) { cpu.setL(cpu.swapNibbles(cpu.L())) }
-	cbOpcodes[0x36] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.swapNibbles(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x36] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.swapNibbles(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x37] = func(cpu *CPU) { cpu.setA(cpu.swapNibbles(cpu.A())) }
 	cbOpcodes[0x38] = func(cpu *CPU) { cpu.setB(cpu.shiftRightLogical(cpu.B())) }
 	cbOpcodes[0x39] = func(cpu *CPU) { cpu.setC(cpu.shiftRightLogical(cpu.C())) }
@@ -320,6 +320,6 @@ func init() {
 	cbOpcodes[0x3B] = func(cpu *CPU) { cpu.setE(cpu.shiftRightLogical(cpu.E())) }
 	cbOpcodes[0x3C] = func(cpu *CPU) { cpu.setH(cpu.shiftRightLogical(cpu.H())) }
 	cbOpcodes[0x3D] = func(cpu *CPU) { cpu.setL(cpu.shiftRightLogical(cpu.L())) }
-	cbOpcodes[0x3E] = func(cpu *CPU) { cpu.mapper.Write(cpu.hl, cpu.shiftRightLogical(cpu.mapper.Read(cpu.hl))) }
+	cbOpcodes[0x3E] = func(cpu *CPU) { cpu.mapper.write(cpu.hl, cpu.shiftRightLogical(cpu.mapper.read(cpu.hl))) }
 	cbOpcodes[0x3F] = func(cpu *CPU) { cpu.setA(cpu.shiftRightLogical(cpu.A())) }
 }

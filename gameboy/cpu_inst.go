@@ -2,15 +2,15 @@ package gameboy
 
 // Fetches the next byte from memory and increments the program counter
 func (cpu *CPU) fetchPC() byte {
-	v := cpu.mapper.Read(cpu.pc)
+	v := cpu.mapper.read(cpu.pc)
 	cpu.pc += 1
 	return v
 }
 
 // Fetches the next 16-bit word from memory and increments the program counter
 func (cpu *CPU) fetchPC16() uint16 {
-	lo := cpu.mapper.Read(cpu.pc)
-	hi := cpu.mapper.Read(cpu.pc + 1)
+	lo := cpu.mapper.read(cpu.pc)
+	hi := cpu.mapper.read(cpu.pc + 1)
 	cpu.pc += 2
 	return uint16(hi)<<8 | uint16(lo)
 }
@@ -26,8 +26,8 @@ func (cpu *CPU) callSub(addr uint16) {
 func (cpu *CPU) pushStack(addr uint16) {
 	//log.Printf(">>>> Pushing %04X to stack at SP:%04X\n", addr, cpu.SP)
 	sp := cpu.sp
-	cpu.mapper.Write(sp-1, byte(uint16(addr&0xFF00)>>8))
-	cpu.mapper.Write(sp-2, byte(addr&0xFF))
+	cpu.mapper.write(sp-1, byte(uint16(addr&0xFF00)>>8))
+	cpu.mapper.write(sp-2, byte(addr&0xFF))
 	cpu.sp -= 2
 }
 
@@ -41,8 +41,8 @@ func (cpu *CPU) returnSub() {
 // Pops a 16-bit value from the stack
 func (cpu *CPU) popStack() uint16 {
 	sp := cpu.sp
-	lo := cpu.mapper.Read(sp)
-	hi := cpu.mapper.Read(sp + 1)
+	lo := cpu.mapper.read(sp)
+	hi := cpu.mapper.read(sp + 1)
 	cpu.sp += 2
 	return uint16(hi)<<8 | uint16(lo)
 }
@@ -116,7 +116,7 @@ func (cpu *CPU) wordAdd(a, b uint16) uint16 {
 
 // Performs 8-bit subtraction between two bytes and sets the flags accordingly
 func (cpu *CPU) byteSub(a, b byte) byte {
-	result := a - b
+	result := int16(a) - int16(b)
 	carry := a < b
 
 	cpu.setFlagZ(result == 0)
@@ -124,7 +124,7 @@ func (cpu *CPU) byteSub(a, b byte) byte {
 	cpu.setFlagH(a&0xF < b&0xF)
 	cpu.setFlagC(carry)
 
-	return result
+	return byte(result)
 }
 
 // Performs 8-bit subtraction with carry between two bytes and sets the flags accordingly

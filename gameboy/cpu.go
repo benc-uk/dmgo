@@ -96,7 +96,7 @@ func (cpu *CPU) handleInterrupt(interrupt byte) {
 	cpu.ime = false
 
 	// Clear the interrupt flag at the interrupt bit
-	cpu.mapper.Write(IF, cpu.mapper.Read(IF)&^interrupt)
+	cpu.mapper.write(IF, cpu.mapper.read(IF)&^interrupt)
 
 	// Push the current PC onto the stack
 	cpu.pushStack(cpu.pc)

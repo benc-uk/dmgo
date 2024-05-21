@@ -117,7 +117,7 @@ func (g *Game) Update() error {
 	}
 
 	// Main emulator loop
-	gb.Update(clockSpeed / 20)
+	gb.Update(clockSpeed / tps)
 
 	return nil
 }

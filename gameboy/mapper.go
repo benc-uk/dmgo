@@ -92,7 +92,7 @@ func NewMapper(buttons *Buttons) *Mapper {
 	return m
 }
 
-func (m *Mapper) Write(addr uint16, data byte) {
+func (m *Mapper) write(addr uint16, data byte) {
 	switch {
 	case addr < ROM_BANK:
 		{
@@ -155,10 +155,20 @@ func (m *Mapper) Write(addr uint16, data byte) {
 				m.io[addr-IO] = data
 				for i := 0; i < 0xA0; i++ {
 					// For DMA source address is divided by 0x100 for some reason
-					m.Write(OAM+uint16(i), m.Read(uint16(data)*0x100+uint16(i)))
+					m.write(OAM+uint16(i), m.read(uint16(data)*0x100+uint16(i)))
 				}
 				return
 			}
+
+			// if addr == SC {
+			// 	if data == 0x81 {
+			// 		log.Printf("Serial transfer: %c\n", m.io[01])
+
+			// 		// Reset the transfer flag
+			// 		m.io[addr-IO] = 0x80
+			// 	}
+			// 	return
+			// }
 
 			m.io[addr-IO] = data
 		}
@@ -180,7 +190,7 @@ func (m *Mapper) Write(addr uint16, data byte) {
 	}
 }
 
-func (m Mapper) Read(addr uint16) byte {
+func (m Mapper) read(addr uint16) byte {
 	switch {
 	case addr < ROM_BANK:
 		// Special case for the boot ROM, which is overlaid on the first 256 bytes of memory
@@ -209,25 +219,30 @@ func (m Mapper) Read(addr uint16) byte {
 		if addr == JOYP {
 			// If bit 4 is NOT set, return the d-pad state
 			if m.io[0]&0x10 == 0 {
-				return m.io[0] | m.buttons.GetPadState()
+				return m.io[0] | m.buttons.getPadState()
 			}
 
 			// If bit 5 is ZERO, return the button state
 			if m.io[0]&0x20 == 0 {
-				return m.io[0] | m.buttons.GetButtonState()
-			}
-
-			if addr == STAT {
-				log.Printf("Reading STAT register\n")
-			}
-
-			if addr == LCDC {
-				log.Printf("Reading LCDC register\n")
+				return m.io[0] | m.buttons.getButtonState()
 			}
 
 			// If neither bit 4 or 5 are set, return 0xFF
 			return m.io[0] | 0x0F
 		}
+
+		// if addr == STAT {
+		// 	log.Printf("Reading STAT register\n")
+		// }
+
+		// if addr == LCDC {
+		// 	log.Printf("Reading LCDC register\n")
+		// }
+
+		// if addr == LY {
+		// 	//log.Printf("Reading LY register %02X\n", m.io[68])
+		// 	return 153
+		// }
 
 		// Rest of the IO registers are just read
 		return m.io[addr-IO]
@@ -244,7 +259,7 @@ func (m Mapper) Read(addr uint16) byte {
 }
 
 func (m *Mapper) bootROMEnabled() bool {
-	return len(m.bootROM) > 0 && m.Read(BOOT_ROM_DISABLE) == 0
+	return len(m.bootROM) > 0 && m.read(BOOT_ROM_DISABLE) == 0
 }
 
 func (m *Mapper) loadBootROM(data []byte) {
@@ -253,6 +268,6 @@ func (m *Mapper) loadBootROM(data []byte) {
 		log.Fatalf("Boot ROM is not the correct size, got %d bytes, expected 256 bytes", len(data))
 	}
 
-	m.Write(BOOT_ROM_DISABLE, 0x00) // ENABLE the boot ROM
+	m.write(BOOT_ROM_DISABLE, 0x00) // ENABLE the boot ROM
 	m.bootROM = data
 }

@@ -56,11 +56,11 @@ func NewGameboy(config Config) *Gameboy {
 	ppu.gb = &gb // Ugly cross dependency, so PPU can request interrupts
 
 	// Set up the initial state of the Gameboy
-	mapper.Write(LCDC, 0x91) // Set the LCDC register
-	mapper.Write(STAT, 0x81) // Set the STAT register
-	mapper.Write(LY, 0x91)   // Set the scanline to 145
-	mapper.Write(BGP, 0xFC)  // Set the background palette
-	mapper.Write(DIV, 0xAB)  // Set the divider
+	mapper.write(LCDC, 0x91) // Set the LCDC register
+	mapper.write(STAT, 0x81) // Set the STAT register
+	mapper.write(LY, 0x91)   // Set the scanline to 145
+	mapper.write(BGP, 0xFC)  // Set the background palette
+	mapper.write(DIV, 0xAB)  // Set the divider
 
 	// Optional boot ROM, not needed but included for authenticity
 	if config.BootROM != "" {
@@ -80,7 +80,7 @@ func NewGameboy(config Config) *Gameboy {
 	if !mapper.bootROMEnabled() {
 		log.Println("Boot ROM not available, it will be disabled")
 		// DISABLE the boot ROM
-		mapper.Write(BOOT_ROM_DISABLE, 0x01)
+		mapper.write(BOOT_ROM_DISABLE, 0x01)
 		// Jump PC to 0x100, this is where PC would be after the boot ROM
 		cpu.pc = 0x100
 	}
@@ -133,28 +133,25 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 
 		// PPU update
 		gb.ppu.cycle(cpuCycles)
+
+		// Read serial port, really only used for debugging and Blargg's tests
+		if gb.mapper.io[0x02] == 0x81 {
+			fmt.Printf("%c", gb.mapper.io[0x01])
+			gb.mapper.io[0x02] = 0x80
+		}
 	}
 
 	// Timer update DIV
 	gb.updateTimers(cycles)
-
-	// Read serial input
-	// HACK: Replace with a proper serial port implementation
-	hasData := gb.mapper.Read(SC)
-	if hasData == 0x81 {
-		// Read the data from the serial port
-		data := gb.mapper.Read(SB)
-		log.Printf("Serial data read: %c\n", data)
-		gb.mapper.Write(SC, 0x01)
-
-		gb.requestInterrupt(INT_SERIAL)
-	}
 
 	// Interrupt for joypad
 	if gb.Buttons.Changed() {
 		gb.requestInterrupt(INT_JOYPAD)
 		gb.Buttons.ClearChanged()
 	}
+
+	// HACK: Not sure this needs to be here
+	gb.ppu.render()
 }
 
 func (gb *Gameboy) checkInterrupts() int {
@@ -164,12 +161,12 @@ func (gb *Gameboy) checkInterrupts() int {
 	}
 
 	// Check for interrupts
-	if gb.mapper.Read(IF)&gb.mapper.Read(IE) != 0 {
+	if gb.mapper.read(IF)&gb.mapper.read(IE) != 0 {
 		gb.cpu.halted = false
 	}
 
 	if gb.cpu.ime {
-		interruptMask := gb.mapper.Read(IF) & gb.mapper.Read(IE)
+		interruptMask := gb.mapper.read(IF) & gb.mapper.read(IE)
 
 		if interruptMask != 0 {
 			if gb.cpu.halted {
@@ -204,9 +201,9 @@ func (gb *Gameboy) checkInterrupts() int {
 }
 
 func (gb *Gameboy) requestInterrupt(interruptBit byte) {
-	interruptByte := gb.mapper.Read(IF)
+	interruptByte := gb.mapper.read(IF)
 	interruptByte |= interruptBit
-	gb.mapper.Write(IF, interruptByte)
+	gb.mapper.write(IF, interruptByte)
 }
 
 func (gb *Gameboy) updateTimers(cycles int) {
@@ -253,29 +250,31 @@ func (gb *Gameboy) GetDebugInfo() string {
 	cpu := gb.cpu
 
 	out := ""
-	out += fmt.Sprintf("PC: 0x%04X -> %s\n\n", gb.cpu.pc, opcodeNames[gb.mapper.Read(cpu.pc)])
+	out += fmt.Sprintf("PC: 0x%04X -> %s\n\n", gb.cpu.pc, opcodeNames[gb.mapper.read(cpu.pc)])
 	out += fmt.Sprintf("A:%02X B:%02X C:%02X D:%02X E:%02X H:%02X L:%02X\n",
 		cpu.A(), cpu.B(), cpu.C(), cpu.D(), cpu.E(), cpu.H(), cpu.L())
 	out += fmt.Sprintf("AF:%04X BC:%04X DE:%04X HL:%04X SP:%04X\n", cpu.af, cpu.bc, cpu.de, cpu.hl, cpu.sp)
-	out += fmt.Sprintf("IE:%08b IF:%08b IME:%d\n", gb.mapper.Read(IE), gb.mapper.Read(IF), BoolToInt(cpu.ime))
+	out += fmt.Sprintf("IE:%08b IF:%08b IME:%d\n", gb.mapper.read(IE), gb.mapper.read(IF), BoolToInt(cpu.ime))
 
 	// Flags
 	out += fmt.Sprintf("Z:%d N:%d H:%d C:%d\n\n",
 		BoolToInt(cpu.getFlagZ()), BoolToInt(cpu.getFlagN()), BoolToInt(cpu.getFlagH()), BoolToInt(cpu.getFlagC()))
 
-	// Show the next 5 bytes of memory
-	for i := cpu.pc - 1; i < cpu.pc+5; i++ {
-		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.Read(i))
+	// Show the next 4 bytes of memory
+	for i := cpu.pc; i < cpu.pc+4; i++ {
+		out += fmt.Sprintf("%04X: 0x%02X\n", i, gb.mapper.read(i))
 	}
 
-	out += fmt.Sprintf("\nLCDC: 0x%08b\n", gb.mapper.Read(LCDC))
-	out += fmt.Sprintf("STAT: 0x%08b\n", gb.mapper.Read(STAT))
-	out += fmt.Sprintf("  LY: 0x%02X\n", gb.mapper.Read(LY))
-	out += fmt.Sprintf(" LYC: 0x%02X\n", gb.mapper.Read(LYC))
-	out += fmt.Sprintf(" BGP: 0x%08b\n\n", gb.mapper.Read(BGP))
+	out += fmt.Sprintf("\nLCDC: 0x%08b\n", gb.mapper.read(LCDC))
+	out += fmt.Sprintf("STAT: %08b\n", gb.mapper.read(STAT))
+	out += fmt.Sprintf("  LY: 0x%02X\n", gb.mapper.read(LY))
+	out += fmt.Sprintf(" LYC: 0x%02X\n", gb.mapper.read(LYC))
+	out += fmt.Sprintf(" BGP: %08b\n", gb.mapper.read(BGP))
+	out += fmt.Sprintf("  SB: %08b 0x%02X\n", gb.mapper.io[1], gb.mapper.io[1])
+	out += fmt.Sprintf("  SC: %08b 0x%02X\n\n", gb.mapper.io[2], gb.mapper.io[2])
 
 	for _, addr := range gb.mapper.watches {
-		out += fmt.Sprintf("Watch %04X:%02X\n", addr, gb.mapper.Read(addr))
+		out += fmt.Sprintf("Watch %04X:%02X\n", addr, gb.mapper.read(addr))
 	}
 
 	return out

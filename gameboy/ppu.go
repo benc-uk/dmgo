@@ -39,10 +39,10 @@ type Sprite struct {
 func NewPPU(mapper *Mapper) *PPU {
 	// Hard coded palette for now
 	pallet := [4]color.RGBA{
-		color.RGBA{0xe0, 0xf8, 0xd0, 255},
-		color.RGBA{0x88, 0xc0, 0x70, 255},
-		color.RGBA{0x34, 0x68, 0x56, 255},
-		color.RGBA{0x08, 0x18, 0x20, 255},
+		{0xe0, 0xf8, 0xd0, 255},
+		{0x88, 0xc0, 0x70, 255},
+		{0x34, 0x68, 0x56, 255},
+		{0x08, 0x18, 0x20, 255},
 	}
 
 	ppu := &PPU{
@@ -79,26 +79,33 @@ func (ppu *PPU) getTileImage(addr uint16) *ebiten.Image {
 		return ppu.tileCache[addr]
 	}
 
-	img := ebiten.NewImage(8, 8)
+	pixels := make([]byte, 8*8*4)
 
 	// Read the Gameboy palette state, this can be changed by the game
-	palLookupByte := ppu.mapper.Read(BGP)
+	palLookup := ppu.mapper.read(BGP)
 
 	for tileByteIndex := uint16(0); tileByteIndex < 16; tileByteIndex += 2 {
-		byte1 := ppu.mapper.Read(addr + tileByteIndex)
-		byte2 := ppu.mapper.Read(addr + tileByteIndex + 1)
+		byte1 := ppu.mapper.read(addr + tileByteIndex)
+		byte2 := ppu.mapper.read(addr + tileByteIndex + 1)
+		y := int(tileByteIndex / 2)
 		for bit := 0; bit < 8; bit++ {
 			// Combine the bits to get the color index
 			colorId := (byte1 >> (7 - bit) & 1) | ((byte2 >> (7 - bit) & 1) << 1)
 
 			// Use the palette BGP, which is byte with 2bit colorId -> Value mapping
 			// https://gbdev.io/pandocs/Palettes.html
-			color := palLookupByte >> (colorId * 2) & 0x3
+			colorVal := palLookup >> (colorId * 2) & 0x3
 
-			// Set the final color in the image
-			img.Set(bit, int(tileByteIndex/2), ppu.emuPalette[color])
+			// Set the final color in the pixel array
+			pixels[(y*8+bit)*4] = ppu.emuPalette[colorVal].R
+			pixels[(y*8+bit)*4+1] = ppu.emuPalette[colorVal].G
+			pixels[(y*8+bit)*4+2] = ppu.emuPalette[colorVal].B
+			pixels[(y*8+bit)*4+3] = 255
 		}
 	}
+
+	img := ebiten.NewImage(8, 8)
+	img.WritePixels(pixels)
 
 	// Cache the tile
 	ppu.tileCache[addr] = img
@@ -106,7 +113,7 @@ func (ppu *PPU) getTileImage(addr uint16) *ebiten.Image {
 }
 
 func (ppu *PPU) getTileAddr(tileNum byte) uint16 {
-	// Addressing mode 8000
+	// Addressing mode 8000 is sane and normal
 	if ppu.GetLCDCBit(4) == 1 {
 		return uint16(TILE_DATA_0 + uint16(tileNum)*16)
 	}
@@ -125,8 +132,8 @@ func (ppu *PPU) render() {
 	ppu.tileCache = make(map[uint16]*ebiten.Image)
 
 	// get SCROLL_Y and SCROLL_X
-	scrollY := float64(ppu.mapper.Read(SCY))
-	scrollX := float64(ppu.mapper.Read(SCX))
+	scrollY := float64(ppu.mapper.read(SCY))
+	scrollX := float64(ppu.mapper.read(SCX))
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position
@@ -134,7 +141,7 @@ func (ppu *PPU) render() {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(float64((i%32)*8)+scrollX, float64((i/32)*8)-scrollY)
 
-		tilenum := int(ppu.mapper.Read(mapBase + i))
+		tilenum := int(ppu.mapper.read(mapBase + i))
 		tileAddr := ppu.getTileAddr(byte(tilenum))
 		ppu.screen.DrawImage(ppu.getTileImage(tileAddr), op)
 	}
@@ -143,6 +150,9 @@ func (ppu *PPU) render() {
 	for i := 0; i < 40; i++ {
 		addr := OAM + uint16(i*4)
 		sprite := ppu.newSprite(addr)
+		if sprite.y == 0 && sprite.x == 0 {
+			continue
+		}
 
 		op := &ebiten.DrawImageOptions{}
 		screenY := int(sprite.y) - 16
@@ -183,13 +193,13 @@ func (ppu *PPU) cycle(clockCycles int) {
 
 		if ppu.scanline > 153 {
 			ppu.scanline = 0
-			ppu.render()
+			// Render has been moved to the main GB loop
 		}
 
-		ppu.mapper.Write(LY, ppu.scanline)
-		if ppu.scanline == ppu.mapper.Read(LYC) {
+		ppu.mapper.write(LY, ppu.scanline)
+		if ppu.scanline == ppu.mapper.read(LYC) {
 			// set bit 2 of STAT
-			ppu.mapper.Write(STAT, bitSet(ppu.mapper.Read(STAT), 2))
+			ppu.mapper.write(STAT, bitSet(ppu.mapper.read(STAT), 2))
 		}
 	}
 }
@@ -204,5 +214,5 @@ func (ppu *PPU) cycle(clockCycles int) {
 // Bit 1 - OBJ Display Enable (0=Off, 1=On)
 // Bit 0 - BG/Window Display/Priority (0=Off, 1=On)
 func (ppu *PPU) GetLCDCBit(bit byte) byte {
-	return ppu.mapper.Read(LCDC) >> bit & 1
+	return ppu.mapper.read(LCDC) >> bit & 1
 }
