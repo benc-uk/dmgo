@@ -917,7 +917,11 @@ var opcodes = [0x100]func(cpu *CPU){
 	0xF0: func(cpu *CPU) { cpu.setA(cpu.mapper.read(0xFF00 + uint16(cpu.fetchPC()))) },
 
 	// POP AF
-	0xF1: func(cpu *CPU) { cpu.af = cpu.popStack() },
+	0xF1: func(cpu *CPU) {
+		val := cpu.popStack()
+		// Lower 4 bits of F are always 0
+		cpu.af = val & 0xFFF0
+	},
 
 	// LD A, (C)
 	0xF2: func(cpu *CPU) { cpu.setA(cpu.mapper.read(0xFF00 + uint16(cpu.C()))) },

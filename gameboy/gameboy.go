@@ -124,8 +124,9 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 		// Run the CPU fetch/exec cycle
 		cpuCycles := gb.cpu.ExecuteNext(false)
 		if cpuCycles < 0 {
-			log.Println("Stopping emulation due to error")
+			log.Println("Stopping emulation")
 			gb.Running = false
+			gb.ppu.render()
 			break
 		}
 
@@ -155,7 +156,6 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 }
 
 func (gb *Gameboy) checkInterrupts() int {
-
 	if gb.cpu.halted && !gb.cpu.ime {
 		return 0
 	}
@@ -225,20 +225,21 @@ func (gb *Gameboy) LoadROM(fileName string) {
 	}
 	fileInfo, _ := file.Stat()
 
+	log.Printf("ROM size: %dKbi\n", fileInfo.Size()/1000)
+
 	// Read the first 16KB of the ROM into the first 16KB of the ROM space
-	byteCount, err := file.Read(gb.mapper.rom0)
+	_, err = file.Read(gb.mapper.rom0)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Read %d bytes into ROM0\n", byteCount)
 
+	// TODO: This needs refactoring once we have MBC and larger ROM support
 	if fileInfo.Size() > 0x4000 {
 		// Read the next 16KB of the ROM into the second 16KB of the ROM space
-		byteCount, err = file.Read(gb.mapper.rom1)
+		_, err = file.Read(gb.mapper.rom1)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Read %d bytes into ROM1\n", byteCount)
 	}
 }
 
@@ -270,8 +271,9 @@ func (gb *Gameboy) GetDebugInfo() string {
 	out += fmt.Sprintf("  LY: 0x%02X\n", gb.mapper.read(LY))
 	out += fmt.Sprintf(" LYC: 0x%02X\n", gb.mapper.read(LYC))
 	out += fmt.Sprintf(" BGP: %08b\n", gb.mapper.read(BGP))
-	out += fmt.Sprintf("  SB: %08b 0x%02X\n", gb.mapper.io[1], gb.mapper.io[1])
-	out += fmt.Sprintf("  SC: %08b 0x%02X\n\n", gb.mapper.io[2], gb.mapper.io[2])
+	out += fmt.Sprintf(" SCY: %02X\n\n", gb.mapper.read(SCY))
+	// out += fmt.Sprintf("  SB: %08b 0x%02X\n", gb.mapper.io[1], gb.mapper.io[1])
+	// out += fmt.Sprintf("  SC: %08b 0x%02X\n\n", gb.mapper.io[2], gb.mapper.io[2])
 
 	for _, addr := range gb.mapper.watches {
 		out += fmt.Sprintf("Watch %04X:%02X\n", addr, gb.mapper.read(addr))

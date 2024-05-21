@@ -80,12 +80,11 @@ func (cpu *CPU) byteXOR(a, b byte) byte {
 // Performs 8-bit addition between two bytes and sets the flags accordingly
 func (cpu *CPU) byteAdd(a, b byte) byte {
 	result := a + b
-	carry := (uint16(a) + uint16(b)) > 0xFF
 
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(false)
 	cpu.setFlagH((a&0xF)+(b&0xF) > 0xF)
-	cpu.setFlagC(carry)
+	cpu.setFlagC(uint16(a)+uint16(b) > 0xFF)
 
 	return result
 }
@@ -105,11 +104,9 @@ func (cpu *CPU) byteAddCarry(a, b byte) byte {
 
 func (cpu *CPU) wordAdd(a, b uint16) uint16 {
 	result := a + b
-	carry := (a + b) > 0xFFFF
-
 	cpu.setFlagN(false)
 	cpu.setFlagH((a&0xFFF)+(b&0xFFF) > 0xFFF)
-	cpu.setFlagC(carry)
+	cpu.setFlagC(result < a)
 
 	return result
 }
@@ -130,14 +127,14 @@ func (cpu *CPU) byteSub(a, b byte) byte {
 // Performs 8-bit subtraction with carry between two bytes and sets the flags accordingly
 func (cpu *CPU) byteSubCarry(a, b byte) byte {
 	carry := byte(BoolToInt(cpu.getFlagC()))
-	result := a - b - carry
+	result := int16(a) - int16(b) - int16(carry)
 
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(true)
 	cpu.setFlagH(a&0xF < b&0xF+carry)
 	cpu.setFlagC(a < b+carry)
 
-	return result
+	return byte(result)
 }
 
 // Performs 8-bit increment on a byte and sets the flags accordingly

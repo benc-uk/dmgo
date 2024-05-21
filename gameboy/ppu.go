@@ -132,8 +132,8 @@ func (ppu *PPU) render() {
 	ppu.tileCache = make(map[uint16]*ebiten.Image)
 
 	// get SCROLL_Y and SCROLL_X
-	scrollY := float64(ppu.mapper.read(SCY))
-	scrollX := float64(ppu.mapper.read(SCX))
+	scrollY := float64(0) //ppu.mapper.read(SCY))
+	scrollX := float64(0)
 
 	// Read the 1024 bytes of tile map data
 	// And render into the screen at the correct position

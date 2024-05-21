@@ -1,7 +1,7 @@
 #bootROM: "etc/dmg_boot.bin"
 
-# breakpoints: [0xc003]
+# breakpoints: [0xDEF8]
 
 watches: []
 
-opcodeDebug: [0xff]
+opcodeDebug: []
