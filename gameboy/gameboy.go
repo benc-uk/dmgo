@@ -32,8 +32,9 @@ type Gameboy struct {
 
 	divider int
 
-	Running bool
-	config  Config
+	Running      bool
+	config       Config
+	timerCounter int
 }
 
 func NewGameboy(config Config) *Gameboy {
@@ -57,10 +58,13 @@ func NewGameboy(config Config) *Gameboy {
 
 	// Set up the initial state of the Gameboy
 	mapper.write(LCDC, 0x91) // Set the LCDC register
-	mapper.write(STAT, 0x81) // Set the STAT register
-	mapper.write(LY, 0x91)   // Set the scanline to 145
+	mapper.write(STAT, 0x85) // Set the STAT register
+	mapper.write(LY, 0x00)   // Set the scanline to 145
 	mapper.write(BGP, 0xFC)  // Set the background palette
 	mapper.write(DIV, 0xAB)  // Set the divider
+	mapper.write(TAC, 0xF8)  // Set the timer control
+	mapper.write(TIMA, 0x00) // Set the timer counter
+	mapper.write(TMA, 0x00)  // Set the timer modulo
 
 	// Optional boot ROM, not needed but included for authenticity
 	if config.BootROM != "" {
@@ -119,8 +123,6 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 
 	cycles := 0
 	for cycles <= cyclesPerFrame {
-		cycles += gb.checkInterrupts()
-
 		// Run the CPU fetch/exec cycle
 		cpuCycles := gb.cpu.ExecuteNext(false)
 		if cpuCycles < 0 {
@@ -130,10 +132,11 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 			break
 		}
 
-		cycles += cpuCycles
-
-		// PPU update
+		// Update core components
 		gb.ppu.cycle(cpuCycles)
+		gb.updateTimers(cpuCycles)
+		cycles += cpuCycles
+		cycles += gb.checkInterrupts()
 
 		// Read serial port, really only used for debugging and Blargg's tests
 		if gb.mapper.io[0x02] == 0x81 {
@@ -141,9 +144,6 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 			gb.mapper.io[0x02] = 0x80
 		}
 	}
-
-	// Timer update DIV
-	gb.updateTimers(cycles)
 
 	// Interrupt for joypad
 	if gb.Buttons.Changed() {
@@ -156,10 +156,6 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 }
 
 func (gb *Gameboy) checkInterrupts() int {
-	if gb.cpu.halted && !gb.cpu.ime {
-		return 0
-	}
-
 	// Check for interrupts
 	if gb.mapper.read(IF)&gb.mapper.read(IE) != 0 {
 		gb.cpu.halted = false
@@ -176,23 +172,23 @@ func (gb *Gameboy) checkInterrupts() int {
 
 			if interruptMask&INT_VBLANK != 0 {
 				gb.cpu.handleInterrupt(INT_VBLANK)
-				return 20
+				return 5
 			}
 			if interruptMask&INT_LCD != 0 {
 				gb.cpu.handleInterrupt(INT_LCD)
-				return 20
+				return 5
 			}
 			if interruptMask&INT_TIMER != 0 {
 				gb.cpu.handleInterrupt(INT_TIMER)
-				return 20
+				return 5
 			}
 			if interruptMask&INT_SERIAL != 0 {
 				gb.cpu.handleInterrupt(INT_SERIAL)
-				return 20
+				return 5
 			}
 			if interruptMask&INT_JOYPAD != 0 {
 				gb.cpu.handleInterrupt(INT_JOYPAD)
-				return 20
+				return 5
 			}
 		}
 	}
@@ -206,14 +202,46 @@ func (gb *Gameboy) requestInterrupt(interruptBit byte) {
 	gb.mapper.write(IF, interruptByte)
 }
 
+// Timer update is complex
+// TODO: This is still wrong
 func (gb *Gameboy) updateTimers(cycles int) {
-	// TODO: Not sure this is the correct way to handle the DIV register
+	tac := gb.mapper.read(TAC)
+	if checkBit(tac, 2) {
+		gb.timerCounter += cycles
+
+		// Timer is enabled
+		freq := tac & 0x3
+		var clockSel int
+		switch freq {
+		case 0:
+			clockSel = 256
+		case 1:
+			clockSel = 4
+		case 2:
+			clockSel = 16
+		case 3:
+			clockSel = 64
+		}
+
+		for gb.timerCounter >= clockSel {
+			gb.timerCounter -= clockSel
+			tima := gb.mapper.read(TIMA)
+
+			if tima == 0xff {
+				gb.requestInterrupt(INT_TIMER)
+				gb.mapper.write(TIMA, gb.mapper.read(TMA))
+			} else {
+				gb.mapper.write(TIMA, tima+1)
+			}
+		}
+	}
+
 	gb.divider += cycles
-	if gb.divider >= 256 {
-		gb.divider -= 256
+	if gb.divider >= 255 {
+		gb.divider -= 255
 		// Note that the DIV register is actually at 0xff04
 		// We can't use Write() as that resets the divider
-		gb.mapper.io[DIV-IO]++
+		gb.mapper.io[4]++
 	}
 }
 
@@ -271,7 +299,9 @@ func (gb *Gameboy) GetDebugInfo() string {
 	out += fmt.Sprintf("  LY: 0x%02X\n", gb.mapper.read(LY))
 	out += fmt.Sprintf(" LYC: 0x%02X\n", gb.mapper.read(LYC))
 	out += fmt.Sprintf(" BGP: %08b\n", gb.mapper.read(BGP))
-	out += fmt.Sprintf(" SCY: %02X\n\n", gb.mapper.read(SCY))
+	out += fmt.Sprintf(" SCY: %02X\n", gb.mapper.read(SCY))
+	out += fmt.Sprintf("TIMA: %02X\n", gb.mapper.read(TIMA))
+	out += fmt.Sprintf(" TMA: %02X\n\n", gb.mapper.read(TMA))
 	// out += fmt.Sprintf("  SB: %08b 0x%02X\n", gb.mapper.io[1], gb.mapper.io[1])
 	// out += fmt.Sprintf("  SC: %08b 0x%02X\n\n", gb.mapper.io[2], gb.mapper.io[2])
 

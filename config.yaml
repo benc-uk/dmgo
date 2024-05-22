@@ -4,4 +4,5 @@ breakpoints: []
 
 watches: []
 
-opcodeDebug: []
+# opcodeDebug: []
+opcodeDebug: [0x76]

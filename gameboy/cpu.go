@@ -111,7 +111,6 @@ func (cpu *CPU) handleInterrupt(interrupt byte) {
 	case 0x10:
 		cpu.pc = 0x0060 // Joypad interrupt handler address
 	}
-
 }
 
 // Flag getters and setters

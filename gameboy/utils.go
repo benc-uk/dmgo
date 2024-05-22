@@ -44,3 +44,7 @@ func twoBitValue(b byte, bit uint) int {
 	// get two bits at position bit and bit+1 and return them as a int from 0 to 3
 	return int((b >> bit) & 0x3)
 }
+
+func checkBit(b byte, bit uint) bool {
+	return b&(1<<bit) != 0
+}
