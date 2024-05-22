@@ -28,14 +28,13 @@ type CPU struct {
 
 func NewCPU(mapper *Mapper) *CPU {
 	// Initial state of the CPU for the classic GB
-	// It represents the state of the CPU after the BIOS has run, as we skip that
 	cpu := CPU{
 		af:     0x01B0,
 		bc:     0x0013,
 		de:     0x00D8,
 		hl:     0x014D,
 		sp:     0xFFEE,
-		pc:     0x0000,
+		pc:     0x0000, // This is set elsewhere
 		mapper: mapper,
 	}
 
@@ -90,8 +89,6 @@ func (cpu *CPU) ExecuteNext(skipBreak bool) (cyclesSpent int) {
 }
 
 func (cpu *CPU) handleInterrupt(interrupt byte) {
-	//log.Printf("Handling interrupt %08b\n", interrupt)
-
 	// Disable interrupts
 	cpu.ime = false
 
@@ -117,9 +114,7 @@ func (cpu *CPU) handleInterrupt(interrupt byte) {
 
 }
 
-// =======================================
 // Flag getters and setters
-// =======================================
 
 func (cpu *CPU) setFlagZ(value bool) {
 	if value {
@@ -146,7 +141,6 @@ func (cpu *CPU) setFlagH(value bool) {
 }
 
 func (cpu *CPU) setFlagC(value bool) {
-	// In bit 4
 	if value {
 		cpu.af |= 0x10
 	} else {
@@ -162,9 +156,7 @@ func (cpu *CPU) getFlagH() bool { return cpu.af&0x20 != 0 }
 
 func (cpu *CPU) getFlagC() bool { return cpu.af&0x10 != 0 }
 
-// =======================================
 // Register getters and setters
-// =======================================
 
 func (cpu *CPU) setA(value byte) { setHighByte(&cpu.af, value) }
 

@@ -7,21 +7,19 @@ Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.or
 ## Status
 
 - Boots some ROMs, and runs the Gameboy boot ROM if present
-- 100% of the CPU opcodes (Yet to be fully tested)
-- 100% of the CB prefix opcodes (Yes to be fully tested)
-- PPU: Functional rendering but incomplete (e.g. scanlines)
+- Tetris is playable!
+- 100% of the CPU opcodes working and passing [Blargg's tests](https://github.com/retrio/gb-test-roms)
+- PPU & LCD: Functional rendering but needs major work
 - Some interrupts, e.g. vblank
-- Timing: CPU and PPU mostly? clock correct
+- Timing: CPU and PPU mostly? clock correct?
 - No sound
 
-## Todo
+## Todo Next
 
-- Finish instructions!
 - Other interrupts, timer etc
-- Correct STAT register
-- Is HALT working?
+  - Pass Blargg _02-interrupts.gb_ test ROM
+- Correct & update STAT register
 - Render correctly per scanline
-  - Remove sprite/tile cache
 
 Longer term
 

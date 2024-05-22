@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 
 [build]
 args_bin = []
-bin = "./tmp/main roms/test/individual/04-op\\ r,imm.gb"
+bin = "./tmp/main roms/test/individual/07-jr,jp,call,ret,rst.gb"
 cmd = "go build -o ./tmp/main ."
 exclude_dir = ["tmp", "etc", "fonts", "roms"]
 include_ext = ["yaml", "go"]

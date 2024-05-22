@@ -1,6 +1,6 @@
 #bootROM: "etc/dmg_boot.bin"
 
-# breakpoints: [0xDEF8]
+breakpoints: []
 
 watches: []
 

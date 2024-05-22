@@ -17,14 +17,12 @@ func (cpu *CPU) fetchPC16() uint16 {
 
 // Used to call a subroutine at the given address
 func (cpu *CPU) callSub(addr uint16) {
-	//log.Printf(">>> Calling %04X from PC:%04X\n", addr, cpu.PC)
 	cpu.pushStack(cpu.pc)
 	cpu.pc = addr
 }
 
 // Pushes a 16-bit value onto the stack, often the PC but can be any value
 func (cpu *CPU) pushStack(addr uint16) {
-	//log.Printf(">>>> Pushing %04X to stack at SP:%04X\n", addr, cpu.SP)
 	sp := cpu.sp
 	cpu.mapper.write(sp-1, byte(uint16(addr&0xFF00)>>8))
 	cpu.mapper.write(sp-2, byte(addr&0xFF))
@@ -34,7 +32,6 @@ func (cpu *CPU) pushStack(addr uint16) {
 // Returns from a subroutine by popping the address from the stack
 func (cpu *CPU) returnSub() {
 	pc := cpu.popStack()
-	//log.Printf(">>>> Returning to %04X from SP:%04X\n", pc, cpu.SP)
 	cpu.pc = pc
 }
 
@@ -77,31 +74,20 @@ func (cpu *CPU) byteXOR(a, b byte) byte {
 	return result
 }
 
-// Performs 8-bit addition between two bytes and sets the flags accordingly
-func (cpu *CPU) byteAdd(a, b byte) byte {
-	result := a + b
-
-	cpu.setFlagZ(result == 0)
-	cpu.setFlagN(false)
-	cpu.setFlagH((a&0xF)+(b&0xF) > 0xF)
-	cpu.setFlagC(uint16(a)+uint16(b) > 0xFF)
-
-	return result
-}
-
 // Performs 8-bit addition with carry between two bytes and sets the flags accordingly
-func (cpu *CPU) byteAddCarry(a, b byte) byte {
-	carry := byte(BoolToInt(cpu.getFlagC()))
-	result := a + b + carry
+func (cpu *CPU) byteAdd(a, b byte, addCarry bool) byte {
+	carry := int16(BoolToByte(cpu.getFlagC() && addCarry))
+	result := int16(a) + int16(b) + carry
 
-	cpu.setFlagZ(result == 0)
+	cpu.setFlagZ(byte(result) == 0)
 	cpu.setFlagN(false)
-	cpu.setFlagH((a&0xF)+(b&0xF)+carry > 0xF)
-	cpu.setFlagC(uint16(a)+uint16(b)+uint16(carry) > 0xFF)
+	cpu.setFlagH((b&0xF)+(a&0xF)+byte(carry) > 0xF)
+	cpu.setFlagC(result > 0xFF) // If result is greater than 255
 
-	return result
+	return byte(result)
 }
 
+// Performs 16-bit addition with carry between two words and sets the flags accordingly
 func (cpu *CPU) wordAdd(a, b uint16) uint16 {
 	result := a + b
 	cpu.setFlagN(false)
@@ -111,30 +97,18 @@ func (cpu *CPU) wordAdd(a, b uint16) uint16 {
 	return result
 }
 
-// Performs 8-bit subtraction between two bytes and sets the flags accordingly
-func (cpu *CPU) byteSub(a, b byte) byte {
-	result := int16(a) - int16(b)
-	carry := a < b
-
-	cpu.setFlagZ(result == 0)
-	cpu.setFlagN(true)
-	cpu.setFlagH(a&0xF < b&0xF)
-	cpu.setFlagC(carry)
-
-	return byte(result)
-}
-
 // Performs 8-bit subtraction with carry between two bytes and sets the flags accordingly
-func (cpu *CPU) byteSubCarry(a, b byte) byte {
-	carry := byte(BoolToInt(cpu.getFlagC()))
-	result := int16(a) - int16(b) - int16(carry)
+func (cpu *CPU) byteSub(a, b byte, addCarry bool) byte {
+	carry := int16(BoolToByte(cpu.getFlagC() && addCarry))
+	dirtySum := int16(a) - int16(b) - carry
+	result := byte(dirtySum)
 
 	cpu.setFlagZ(result == 0)
 	cpu.setFlagN(true)
-	cpu.setFlagH(a&0xF < b&0xF+carry)
-	cpu.setFlagC(a < b+carry)
+	cpu.setFlagH(int16(a&0x0f)-int16(b&0xF)-int16(carry) < 0)
+	cpu.setFlagC(dirtySum < 0)
 
-	return byte(result)
+	return result
 }
 
 // Performs 8-bit increment on a byte and sets the flags accordingly
@@ -177,6 +151,7 @@ func (cpu *CPU) bitTest(reg byte, bit uint) {
 	cpu.setFlagH(true)
 }
 
+// Rotate left through carry and sets the flags accordingly
 func (cpu *CPU) rotLeft(val byte) byte {
 	newCarry := val >> 7
 	oldCarry := byte(BoolToInt(cpu.getFlagC()))

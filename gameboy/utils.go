@@ -7,6 +7,13 @@ func BoolToInt(b bool) int {
 	return 0
 }
 
+func BoolToByte(b bool) byte {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func setHighByte(reg *uint16, value byte) {
 	*reg = uint16(value)<<8 | *reg&0x00ff
 }
