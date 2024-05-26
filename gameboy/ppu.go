@@ -28,12 +28,13 @@ type PPU struct {
 
 // Abstraction over the OAM data to represent a sprite
 type Sprite struct {
-	y        byte
-	x        byte
-	tile     byte
-	priority bool
-	flipY    bool
-	flipX    bool
+	y          byte
+	x          byte
+	tile       byte
+	bgPriority bool
+	flipY      bool
+	flipX      bool
+	palette    byte
 }
 
 func NewPPU(mapper *Mapper) *PPU {
@@ -59,13 +60,19 @@ func NewPPU(mapper *Mapper) *PPU {
 func (ppu *PPU) newSprite(addr uint16) Sprite {
 	i := (addr - OAM) / 4
 
+	palette := ppu.mapper.read(OBP0)
+	if ppu.mapper.oam[i*4+3]&0x10 == 0x10 {
+		palette = ppu.mapper.read(OBP1)
+	}
+
 	sprite := Sprite{
-		y:        ppu.mapper.oam[i*4],
-		x:        ppu.mapper.oam[i*4+1],
-		tile:     ppu.mapper.oam[i*4+2],
-		priority: ppu.mapper.oam[i*4+3]&0x80 == 0x80,
-		flipY:    ppu.mapper.oam[i*4+3]&0x40 == 0x40,
-		flipX:    ppu.mapper.oam[i*4+3]&0x20 == 0x20,
+		y:          ppu.mapper.oam[i*4],
+		x:          ppu.mapper.oam[i*4+1],
+		tile:       ppu.mapper.oam[i*4+2],
+		bgPriority: ppu.mapper.oam[i*4+3]&0x80 == 0x80,
+		flipY:      ppu.mapper.oam[i*4+3]&0x40 == 0x40,
+		flipX:      ppu.mapper.oam[i*4+3]&0x20 == 0x20,
+		palette:    palette,
 	}
 
 	return sprite
@@ -73,16 +80,13 @@ func (ppu *PPU) newSprite(addr uint16) Sprite {
 
 // This function creates a new 8x8 image for a tile reading 16 bytes from the VRAM
 // and using the BGP register to lookup the palette
-func (ppu *PPU) getTileImage(addr uint16) *ebiten.Image {
+func (ppu *PPU) getTileImage(addr uint16, palette byte, isObj bool) *ebiten.Image {
 	// Check if the tile is already in the cache
 	if _, ok := ppu.tileCache[addr]; ok {
 		return ppu.tileCache[addr]
 	}
 
 	pixels := make([]byte, 8*8*4)
-
-	// Read the Gameboy palette state, this can be changed by the game
-	palLookup := ppu.mapper.read(BGP)
 
 	for tileByteIndex := uint16(0); tileByteIndex < 16; tileByteIndex += 2 {
 		byte1 := ppu.mapper.read(addr + tileByteIndex)
@@ -92,15 +96,22 @@ func (ppu *PPU) getTileImage(addr uint16) *ebiten.Image {
 			// Combine the bits to get the color index
 			colorId := (byte1 >> (7 - bit) & 1) | ((byte2 >> (7 - bit) & 1) << 1)
 
-			// Use the palette BGP, which is byte with 2bit colorId -> Value mapping
-			// https://gbdev.io/pandocs/Palettes.html
-			colorVal := palLookup >> (colorId * 2) & 0x3
-
 			// Set the final color in the pixel array
-			pixels[(y*8+bit)*4] = ppu.emuPalette[colorVal].R
-			pixels[(y*8+bit)*4+1] = ppu.emuPalette[colorVal].G
-			pixels[(y*8+bit)*4+2] = ppu.emuPalette[colorVal].B
-			pixels[(y*8+bit)*4+3] = 255
+			if colorId == 0 && isObj {
+				// ID 0 is alway transparent for OBJ
+				pixels[(y*8+bit)*4] = 0
+				pixels[(y*8+bit)*4+1] = 0
+				pixels[(y*8+bit)*4+2] = 0
+				pixels[(y*8+bit)*4+3] = 0
+			} else {
+				// Use the palette, which is byte with 2bit colorId -> Value mapping
+				// https://gbdev.io/pandocs/Palettes.html
+				colorVal := palette >> (colorId * 2) & 0x3
+				pixels[(y*8+bit)*4] = ppu.emuPalette[colorVal].R
+				pixels[(y*8+bit)*4+1] = ppu.emuPalette[colorVal].G
+				pixels[(y*8+bit)*4+2] = ppu.emuPalette[colorVal].B
+				pixels[(y*8+bit)*4+3] = 255
+			}
 		}
 	}
 
@@ -143,37 +154,42 @@ func (ppu *PPU) render() {
 
 		tilenum := int(ppu.mapper.read(mapBase + i))
 		tileAddr := ppu.getTileAddr(byte(tilenum))
-		ppu.screen.DrawImage(ppu.getTileImage(tileAddr), op)
+		pal := ppu.mapper.read(BGP)
+		ppu.screen.DrawImage(ppu.getTileImage(tileAddr, pal, false), op)
 	}
 
 	// Handle OAM and render 40 sprites
 	for i := 0; i < 40; i++ {
 		addr := OAM + uint16(i*4)
 		sprite := ppu.newSprite(addr)
-		if sprite.y == 0 && sprite.x == 0 {
+		if sprite.y == 0 && sprite.x == 0 || sprite.y >= 144 || sprite.x >= 160 {
+			continue
+		}
+
+		// HACK: REMOVE LATER
+		if sprite.tile == 0xff {
 			continue
 		}
 
 		op := &ebiten.DrawImageOptions{}
 		screenY := int(sprite.y) - 16
 		screenX := int(sprite.x) - 8
+
+		if sprite.flipX {
+			op.GeoM.Scale(-1, 1)
+			screenX += 8
+		}
+		if sprite.flipY {
+			op.GeoM.Scale(1, -1)
+			screenY += 8
+		}
+
 		op.GeoM.Translate(float64(screenX), float64(screenY))
 
 		// Tile addressing is more simple for sprites
 		tileAddr := TILE_DATA_0 + uint16(sprite.tile)*16
 
-		// Flip the sprite if needed
-		if sprite.flipX {
-			op.GeoM.Scale(-1, 1)
-			op.GeoM.Translate(8, 0)
-		}
-
-		if sprite.flipY {
-			op.GeoM.Scale(1, -1)
-			op.GeoM.Translate(0, 8)
-		}
-
-		ppu.screen.DrawImage(ppu.getTileImage(tileAddr), op)
+		ppu.screen.DrawImage(ppu.getTileImage(tileAddr, sprite.palette, true), op)
 	}
 }
 
@@ -181,7 +197,7 @@ func (ppu *PPU) cycle(clockCycles int) {
 	ppu.dotCounter += clockCycles
 
 	// TODO: Still needs work
-	if ppu.dotCounter > 456 {
+	if ppu.dotCounter >= 456 {
 		ppu.dotCounter = 0
 
 		ppu.scanline++

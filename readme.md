@@ -2,12 +2,13 @@
 
 Another Gameboy emulator written in Go, using [Ebitengine](https://ebitengine.org/) for rendering and display
 
-![screen](./etc/screens/tetris-0.png)
+![screen](./etc/screens/tetris.png)
+![screen](./etc/screens/drmario.png)
 
 ## Status
 
 - Boots some ROMs, and runs the Gameboy boot ROM if present
-- Tetris is playable!
+- Tetris & DrMario is playable!
 - 100% of the CPU opcodes working and passing [Blargg's tests](https://github.com/retrio/gb-test-roms)
 - PPU & LCD: Functional rendering but needs major work
 - Nearly all interrupts
@@ -37,9 +38,9 @@ Docs, so many docs
 
 Inspiration projects
 
-- https://github.com/jacoblister/emuboy
 - https://github.com/Humpheh/goboy
 - https://github.com/ArcticXWolf/AXWGameboy
+- https://github.com/jacoblister/emuboy
 
 Cool videos
 

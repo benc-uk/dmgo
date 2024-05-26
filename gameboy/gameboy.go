@@ -152,6 +152,10 @@ func (gb *Gameboy) Update(cyclesPerFrame int) {
 	}
 
 	// HACK: Not sure this needs to be here
+	//gb.ppu.render()
+}
+
+func (gb *Gameboy) Render() {
 	gb.ppu.render()
 }
 

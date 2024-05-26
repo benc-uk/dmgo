@@ -116,6 +116,11 @@ func (g *Game) Update() error {
 		gb.Buttons.Set("Select", false)
 	}
 
+	// pause/unpause
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		gb.Running = !gb.Running
+	}
+
 	// Main emulator loop
 	gb.Update(clockSpeed / tps)
 
@@ -123,6 +128,8 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	gb.Render()
+
 	// Render emulator screen
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(float64(scale), float64(scale))
